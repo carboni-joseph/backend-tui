@@ -2,6 +2,7 @@ import os
 import requests as r
 from functools import partial
 import configparser
+import platform
 import warnings; warnings.simplefilter('ignore')
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -17,8 +18,19 @@ if VERIFY:
 else:
     r_post = partial(r.post, verify=False)
 
+
 TOKEN_FILENAME = 'token.txt' 
-TOKEN_PATH = os.path.join(os.environ.get('LOCALAPPDATA'), TOKEN_FILENAME)
+system = platform.system()
+if system == 'Windows':
+    TOKEN_PATH = os.path.join(os.environ.get('LOCALAPPDATA'), TOKEN_FILENAME)
+elif system == 'Linux':
+    home_dir = os.path.expanduser('~')
+    token_dir = os.path.join(home_dir, '.local',
+                             'share', 'shupe-carboni-backend-tui')
+    os.makedirs(token_dir, exist_ok=True)
+    TOKEN_PATH = os.path.join(token_dir, TOKEN_FILENAME)
+else:
+    TOKEN_PATH = os.path.join('./', TOKEN_FILENAME)
 
 class AuthToken:
     header: dict[str,str]
