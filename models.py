@@ -222,12 +222,16 @@ class TableRow(Columns):
             text: str,
             align: Literal["left", "center", "right"] = Align.LEFT
     ) -> Text:
-        if text == Stage.REJECTED:
-            attr_map = 'norm_red'
-        elif text == Stage.REMOVED:
-            attr_map = 'norm_red'
-        elif text == Stage.ACTIVE:
-            attr_map = 'norm_green'
+        if text in Stage:
+            match Stage(text):
+                case Stage.REJECTED:
+                    attr_map = 'norm_red'
+                case Stage.REMOVED:
+                    attr_map = 'norm_red'
+                case Stage.ACTIVE:
+                    attr_map = 'norm_green'
+                case _:
+                    attr_map = 'normal'
         else:
             attr_map = 'normal'
         return Text((attr_map, text), align=align)
