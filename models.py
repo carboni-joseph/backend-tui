@@ -222,6 +222,7 @@ class TableRow(Columns):
             text: str,
             align: Literal["left", "center", "right"] = Align.LEFT
     ) -> Text:
+        attr_map = 'normal'
         if text in Stage:
             match Stage(text):
                 case Stage.REJECTED:
@@ -230,10 +231,6 @@ class TableRow(Columns):
                     attr_map = 'norm_red'
                 case Stage.ACTIVE:
                     attr_map = 'norm_green'
-                case _:
-                    attr_map = 'normal'
-        else:
-            attr_map = 'normal'
         return Text((attr_map, text), align=align)
 
     def render(self, size, focus=False):
