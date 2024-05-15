@@ -141,12 +141,10 @@ def get_sca_customers_w_adp_accounts() -> list[SCACustomer]:
     fields = 'fields_adp_customers=customers,adp-alias'
     query_params = '&'.join((page_num, include, fields))
     full_url = ADP_CUSTOMERS + f'?{query_params}'
-    req = partial(r_get, url=full_url)
-    resp = req()
+    resp = r_get(url=full_url)
     if resp.status_code == 401:
         reset_request_methods()
-        req = partial(r_get, url=full_url)
-        resp = req()
+        resp = r_get(url=full_url)
         if resp.status_code == 401:
             raise Exception('Unable to authenticate')
     payload = resp.json()
