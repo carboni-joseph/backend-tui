@@ -168,7 +168,8 @@ def get_sca_customers_w_adp_accounts() -> list[SCACustomer]:
             for k,v in adp_customers.items()
             if v[1] == sca_id
         ]
-        result.append(SCACustomer(sca_name=sca_name, adp_objs=adp_customers_selected))
+        result.append(SCACustomer(sca_name=sca_name,
+                                  adp_objs=adp_customers_selected))
     return result
 
 def reset_request_methods() -> None:
@@ -180,7 +181,8 @@ def reset_request_methods() -> None:
     r_delete = partial(r.delete, headers=AuthToken.header, verify=VERIFY)
 
 def request_dl_link(customer_id: int, stage: Stage) -> str:
-    url = ADP_FILE_DOWNLOAD_LINK.format(customer_id=customer_id, stage=stage.value)
+    url = ADP_FILE_DOWNLOAD_LINK.format(customer_id=customer_id,
+                                        stage=stage.value)
     resp = r_post(url=url)
     if resp.status_code == 401:
         try:
@@ -192,7 +194,8 @@ def request_dl_link(customer_id: int, stage: Stage) -> str:
             resp = r_get(url=url)
         
     elif not resp.status_code == 200:
-        raise Exception(f'Unable to obtain download link.\nMessage: {resp.content.decode()}')
+        raise Exception('Unable to obtain download link.\n'
+                        f'Message: {resp.content.decode()}')
     return resp.json()['downloadLink']
 
 
@@ -238,7 +241,8 @@ def post_new_coil(customer_id: int, model: str) -> r.Response:
     }
     return r_post(url=COILS + f'/{customer_id}', json=payload)
 
-def patch_new_ah_status(customer_id: int, ah_id: int, new_status: Stage) -> r.Response:
+def patch_new_ah_status(customer_id: int, ah_id: int,
+                        new_status: Stage) -> r.Response:
     url = AHS + f'/{customer_id}'
     payload = {
         "data": {
@@ -267,7 +271,8 @@ def post_new_ratings(customer_id: int, file: str) -> None:
         file_data = fh.read()
     resp = r_post(
         url=BACKEND_URL + f'/adp/adp-program-ratings/{customer_id}',
-        files={'ratings_file': (
+        files={
+            'ratings_file': (
                 file,
                 file_data,
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

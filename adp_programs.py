@@ -19,7 +19,8 @@ from actions import (
 from menus import menu, routing_menu, show_new_screen
 
 def customer_chosen(frame: urwid.Frame, choice: SCACustomer, button) -> None:
-    """Generate the next menu, where the user selects the ADP customer name"""
+    """Generate the next menu, where the user 
+        selects the ADP customer name"""
     new_title = f"Choose the ADP account for {choice.sca_name}:"
     new_menu =  partial(
         menu,
@@ -31,7 +32,8 @@ def customer_chosen(frame: urwid.Frame, choice: SCACustomer, button) -> None:
     )
     show_new_screen(frame, new_menu, NAV_STACK)
 
-def action_menu(frame: urwid.Frame, chosen_customer: ADPCustomer, button) -> None:
+def action_menu(frame: urwid.Frame, chosen_customer: ADPCustomer,
+                button) -> None:
     """Once an ADP customer is selected, 
         user can choose to do various administrative tasks"""
     new_menu = partial(
@@ -147,14 +149,18 @@ def update_ah_status(
     go_back()
     frame.header = urwid.Pile([response, frame.header])
 
-def add_new_model(submit_method: Callable, customer: ADPCustomer) -> urwid.ListBox:
+def add_new_model(submit_method: Callable, 
+                  customer: ADPCustomer) -> urwid.ListBox:
     edit = urwid.Edit('Enter Model Number: ')
     submit = urwid.Button(
         'Submit',
         on_press=partial(submit_method, customer),
         user_data=edit
     )
-    return urwid.ListBox([edit, urwid.AttrMap(submit, None, focus_map='reversed')])
+    return urwid.ListBox([
+        edit, 
+        urwid.AttrMap(submit, None, focus_map='reversed')
+    ])
 
 
 def add_new_coil(customer: ADPCustomer) -> urwid.ListBox:
@@ -163,10 +169,12 @@ def add_new_coil(customer: ADPCustomer) -> urwid.ListBox:
 def add_new_ah(customer: ADPCustomer) -> urwid.ListBox:
     return add_new_model(submit_ah_model, customer)
 
-def submit_coil_model(customer: ADPCustomer, button, user_input: urwid.Edit) -> None:
+def submit_coil_model(customer: ADPCustomer, button,
+                      user_input: urwid.Edit) -> None:
     return submit_model(post_new_coil, customer, user_input)
 
-def submit_ah_model(customer: ADPCustomer, button, user_input: urwid.Edit) -> None:
+def submit_ah_model(customer: ADPCustomer, button,
+                    user_input: urwid.Edit) -> None:
     return submit_model(post_new_ah, customer, user_input)
 
 def submit_model(product_type_method: Callable,
@@ -188,7 +196,8 @@ def submit_model(product_type_method: Callable,
         for name, value in body_data['attributes'].items():
             response_body.append(urwid.Text(f'{name}:  {value}'))
     else:
-        response_header = urwid.Text(('flash_bad', f'Unable to add model {model}'))
+        response_header = urwid.Text(('flash_bad',
+                                      f'Unable to add model {model}'))
         response_body = [
             urwid.Divider(),
             urwid.Text(resp.text)
@@ -234,11 +243,13 @@ def upload_ratings(customer: ADPCustomer, selected_file: str):
     except Exception as e:
         header_text = urwid.Text(('flash_bad', str(e)))
     else:
-        header_text = urwid.Text(('flash_good', 'Successfully uploaded ratings'))
+        header_text = urwid.Text(('flash_good', 
+                                  'Successfully uploaded ratings'))
     finally:
         frame.header = urwid.Pile([header_text, frame.header])
 
-def action_chosen(customer: ADPCustomer, frame: urwid.Frame, choice: str, button) -> None:
+def action_chosen(customer: ADPCustomer, frame: urwid.Frame,
+                  choice: str, button) -> None:
     """determine which administrative action
         the user chose and route them to the proper next menu"""
     choice = Actions(choice)
@@ -320,7 +331,8 @@ def action_chosen(customer: ADPCustomer, frame: urwid.Frame, choice: str, button
             try:
                 ahs = get_air_handlers(for_customer=customer).data
             except:
-                flash_text = urwid.Text(('flash_bad', 'No Air Handlers to Display'))
+                flash_text = urwid.Text(('flash_bad',
+                                         'No Air Handlers to Display'))
                 frame.header = urwid.Pile([flash_text, frame.header])
             else:
                 displayable = ['model_number', 'series',

@@ -65,7 +65,8 @@ def routing_menu(frame: Frame, nav: list[tuple],
                 route.callable_choices
             )
             if route.callable_label_attrs:
-                menu_callback = partial(menu_callback, route.callable_label_attrs)
+                menu_callback = partial(menu_callback,
+                                        route.callable_label_attrs)
             elif route.callable_as_table:
                 menu_callback = partial(menu_callback, None,
                                         True, route.callable_headers)
@@ -79,7 +80,8 @@ def routing_menu(frame: Frame, nav: list[tuple],
 def popup(frame: Frame, title: str, callback: Callable, choices: Iterable):
     ...
 
-def show_new_screen(frame: Frame, new_screen_callable, nav: list[tuple], *args):
+def show_new_screen(frame: Frame, new_screen_callable,
+                    nav: list[tuple], *args) -> None:
     global WELCOME_SCREEN
     if WELCOME_SCREEN:
         # don't retain the welcome screen in the nav
@@ -91,7 +93,10 @@ def show_new_screen(frame: Frame, new_screen_callable, nav: list[tuple], *args):
         new_screen = new_screen_callable()
     except Exception as e:
         import traceback as tb
-        flash_text = Text(('flash_bad', f'an error occured - {str(e)}'), align='center')
+        flash_text = Text((
+                'flash_bad',
+                f'an error occured - {str(e)}'),
+            align='center')
         frame.header = Pile([flash_text, frame.header])
         frame.body = Filler(Pile([Text(tb.format_exc())]))
     else:

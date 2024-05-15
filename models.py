@@ -51,10 +51,10 @@ class CoilAttrs(BaseModel):
     metering: str
     cabinet: str
     zero_discount_price: int = Field(alias="zero-discount-price")
-    material_group_discount: Optional[float] = Field(default=None,
-                                                     alias='material-group-discount')
-    material_group_net_price: Optional[float] = Field(default=None,
-                                                      alias='material-group-net-price')
+    material_group_discount: Optional[float] = Field(
+        default=None, alias='material-group-discount')
+    material_group_net_price: Optional[float] = Field(
+        default=None, alias='material-group-net-price')
     snp_discount: Optional[float] = Field(default=None, alias='snp-discount')
     snp_price: Optional[float] = Field(default=None, alias='snp-price')
     net_price: Optional[float] = Field(default=None, alias='net-price')
@@ -86,10 +86,10 @@ class AHAttrs(BaseModel):
     motor: str
     heat: str
     zero_discount_price: int = Field(alias="zero-discount-price")
-    material_group_discount: Optional[float] = Field(default=None,
-                                                     alias='material-group-discount')
-    material_group_net_price: Optional[float] = Field(default=None,
-                                                      alias='material-group-net-price')
+    material_group_discount: Optional[float] = Field(
+        default=None, alias='material-group-discount')
+    material_group_net_price: Optional[float] = Field(
+        default=None, alias='material-group-net-price')
     snp_discount: Optional[float] = Field(default=None, alias='snp-discount')
     snp_price: Optional[float] = Field(default=None, alias='snp-price')
     net_price: Optional[float] = Field(default=None, alias='net-price')
@@ -118,7 +118,8 @@ class RatingAttrs(BaseModel):
     oem_series: Optional[str] = Field(default=None, alias='OEM Series')
     adp_series: Optional[str] = Field(default=None, alias='ADP Series')
     model_number: Optional[str] = Field(default=None, alias='Model Number')
-    coil_model_number: Optional[str] = Field(default=None, alias='Coil Model Number')
+    coil_model_number: Optional[str] = Field(default=None, 
+                                             alias='Coil Model Number')
     furnace_model_number: Optional[str] = Field(default=None,
                                                 alias='Furnace Model Number')
     seer: Optional[float] = None
@@ -133,7 +134,8 @@ class RatingAttrs(BaseModel):
     four_seven_o2: Optional[float] = Field(default=None, alias='47o2')
     one_seven_o2: Optional[float] = Field(default=None, alias='17o2')
     hspf2: Optional[float] = None
-    ahri_ref_number: Optional[int] = Field(default=None, alias='AHRI Ref Number')
+    ahri_ref_number: Optional[int] = Field(default=None,
+                                           alias='AHRI Ref Number')
     region: Optional[str] = None
     effective_date: str = Field(alias='effective-date')
     seer2_as_submitted: Optional[float] = None
@@ -167,6 +169,7 @@ class TableHeader(Columns):
         super().__init__(header_cells, dividechars=1)
 
 class TableRow(Columns):
+    KeypressSize = tuple[()] | tuple[int] | tuple[int, int]
     signals = ['click']
     def __init__(self, contents, selector_text='>',
                  displayable_elements: tuple[str]=None) -> None:
@@ -181,7 +184,10 @@ class TableRow(Columns):
                                      for attr, value in attrs 
                                      if attr in self.displayable]
                 else:
-                    attrs_treated = [(attr, str(value)) for attr, value in attrs]
+                    attrs_treated = [
+                        (attr, str(value))
+                        for attr, value in attrs
+                    ]
                 cells = []
                 for attr in attrs_treated:
                     name, value = attr
@@ -194,7 +200,7 @@ class TableRow(Columns):
     def selectable(self) -> bool:
         return True
 
-    def keypress(self, size: tuple[()] | tuple[int] | tuple[int, int], key: str) -> str | None:
+    def keypress(self, size: KeypressSize, key: str) -> str | None:
         if key == 'enter':
             self._emit('click')
         else:
@@ -202,13 +208,10 @@ class TableRow(Columns):
 
     def mouse_event(
             self,
-            size: tuple[()] | tuple[int] | tuple[int, int],
-            event: str,
-            button: int,
-            col: int,
-            row: int,
+            size: KeypressSize, event: str, button: int,
+            col: int, row: int,
             focus: bool
-    ) -> bool | None:
+        ) -> bool | None:
         if event == 'mouse press' and button == 1:
             self._emit('click')
         else:
@@ -247,7 +250,8 @@ class TableRow(Columns):
             else:
                 try:
                     widget_text, display_options = widget.get_text()
-                    widget_text, styling = self.selective_coloring(widget_text).get_text()
+                    widget_text, styling = self.selective_coloring(
+                        widget_text).get_text()
                     widget.set_text((styling[0][0], widget_text))
                 except:
                     pass
