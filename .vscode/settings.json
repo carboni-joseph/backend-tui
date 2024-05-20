@@ -1,3 +1,12 @@
 {
-	"editor.rulers": [72, 79]
+	"editor.rulers": [88],
+	"[python]": {
+		"diffEditor.ignoreTrimWhitespace": false,
+		"gitlens.codeLens.symbolScopes": [
+			"!Module"
+		],
+		"editor.formatOnType": true,
+		"editor.wordBasedSuggestions": "off",
+		"editor.defaultFormatter": "ms-python.black-formatter"
+	}
 }
