@@ -218,13 +218,21 @@ def download_file(customer_id: str, stage: Stage) -> None:
 
 def patch_new_coil_status(customer_id: int, coil_id: int, 
                           new_status: Stage) -> r.Response:
-    url = COILS + f'/{customer_id}'
+    url = COILS + f'/{coil_id}'
     payload = {
         "data": {
             "id": coil_id,
             "type": "adp-coil-programs",
             "attributes": {
                 "stage": new_status.value
+            },
+            "relationships": {
+                "adp-customers": {
+                    'data': {
+                        'id': customer_id,
+                        'type': 'adp-customers'
+                    }
+                }
             }
         }
     }
@@ -235,19 +243,35 @@ def post_new_coil(customer_id: int, model: str) -> r.Response:
         "type": "adp-coil-programs",
         "attributes": {
             "model-number": model
+        },
+        "relationships": {
+            "adp-customers": {
+                'data': {
+                    'id': customer_id,
+                    'type': 'adp-customers'
+                }
+            }
         }
     }
-    return r_post(url=COILS + f'/{customer_id}', json=payload)
+    return r_post(url=COILS, json=payload)
 
 def patch_new_ah_status(customer_id: int, ah_id: int,
                         new_status: Stage) -> r.Response:
-    url = AHS + f'/{customer_id}'
+    url = AHS + f'/{ah_id}'
     payload = {
         "data": {
             "id": ah_id,
             "type": "adp-ah-programs",
             "attributes": {
                 "stage": new_status.value
+            },
+        "relationships": {
+            "adp-customers": {
+                'data': {
+                    'id': customer_id,
+                    'type': 'adp-customers'
+                    }
+                }
             }
         }
     }
@@ -255,12 +279,22 @@ def patch_new_ah_status(customer_id: int, ah_id: int,
 
 def post_new_ah(customer_id: int, model: str) -> r.Response:
     payload = {
-        "type": "adp-ah-programs",
-        "attributes": {
-            "model-number": model
+        "data": {
+            "type": "adp-ah-programs",
+            "attributes": {
+                "model-number": model
+            },
+            "relationships": {
+                "adp-customers": {
+                    'data': {
+                        'id': customer_id,
+                        'type': 'adp-customers'
+                    }
+                }
+            }
         }
     }
-    return r_post(url=AHS + f'/{customer_id}', json=payload)
+    return r_post(url=AHS, json=payload)
 
 def post_new_ratings(customer_id: int, file: str) -> None:
     if not file:
