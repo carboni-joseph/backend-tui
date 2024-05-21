@@ -239,7 +239,7 @@ def patch_new_coil_status(customer_id: int, coil_id: int,
     return r_patch(url=url, json=payload)
 
 def post_new_coil(customer_id: int, model: str) -> r.Response:
-    payload = {
+    data = {
         "type": "adp-coil-programs",
         "attributes": {
             "model-number": model
@@ -253,6 +253,7 @@ def post_new_coil(customer_id: int, model: str) -> r.Response:
             }
         }
     }
+    payload = dict(data=data)
     return r_post(url=COILS, json=payload)
 
 def patch_new_ah_status(customer_id: int, ah_id: int,
@@ -295,7 +296,7 @@ def post_new_ah(customer_id: int, model: str) -> r.Response:
         }
     }
     return r_post(url=AHS, json=payload)
-
+    
 def post_new_ratings(customer_id: int, file: str) -> None:
     if not file:
         raise UploadError('no file selected')
