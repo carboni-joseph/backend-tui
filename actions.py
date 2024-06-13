@@ -48,7 +48,7 @@ def get_save_dir() -> Path:
 
 BACKEND_URL = configs['ENDPOINTS']['backend_url']
 
-ADP_RESOURCE = BACKEND_URL + '/adp'
+ADP_RESOURCE = BACKEND_URL + '/vendors/adp'
 AHS = ADP_RESOURCE + '/adp-ah-programs'
 COILS = ADP_RESOURCE + '/adp-coil-programs'
 RATINGS = ADP_RESOURCE + '/adp-program-ratings'
@@ -303,7 +303,7 @@ def post_new_ratings(customer_id: int, file: str) -> None:
     with open(file, 'rb') as fh:
         file_data = fh.read()
     resp = r_post(
-        url=BACKEND_URL + f'/adp/adp-program-ratings/{customer_id}',
+        url=BACKEND_URL + f'/vendors/adp/adp-program-ratings/{customer_id}',
         files={
             'ratings_file': (
                 file,
