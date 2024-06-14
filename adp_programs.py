@@ -180,31 +180,27 @@ def submit_ah_model(customer: ADPCustomer, button,
 def submit_model(product_type_method: Callable,
                  customer: ADPCustomer, user_input: urwid.Edit) -> None:
     """sends new model payload to the API"""
-    model = user_input.edit_text
-    resp: Response = product_type_method(customer.id, model)
-    if resp.status_code == 200:
-        body_data: dict[str,str|dict] = resp.json()['data']
-        response_header = urwid.Text((
-            'flash_good',
-            f'Model {model} successfully added '
-            f'for {customer.adp_alias} under id {body_data['id']}'
-        ))
-        response_body = [
-            urwid.Divider(),
-            urwid.Text('Model Info:')
-        ]
-        for name, value in body_data['attributes'].items():
-            response_body.append(urwid.Text(f'{name}:  {value}'))
-    else:
-        response_header = urwid.Text(('flash_bad',
-                                      f'Unable to add model {model}'))
-        response_body = [
-            urwid.Divider(),
-            urwid.Text(resp.text)
-        ]
+    user_text: str = user_input.edit_text
+    model_list: list = [model.strip().upper() for model in user_text.split(',')]
+    results = list()
+    for model in model_list:
+        resp: Response = product_type_method(customer.id, model)
+        body = resp.json()
+        if resp.status_code == 200:
+            body_data: dict[str,str|dict] = body['data']
+            response_header = urwid.Text((
+                'flash_good',
+                f'Model {model} successfully added '
+                f'for {customer.adp_alias} under id {body_data['id']}'
+            ))
+        else:
+            response_header = urwid.Text(('flash_bad',
+                                        f'Unable to add model {model}'))
+        results.append(response_header)
     go_back()
-    frame.header = urwid.Pile([response_header, frame.header])
-    frame.body = urwid.Filler(urwid.Pile(response_body))
+    go_back()
+    frame.header = urwid.Pile([*results, frame.header])
+    # frame.body = urwid.Filler(urwid.Pile(response_body))
 
 
 def remove_rating(
