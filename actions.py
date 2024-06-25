@@ -55,7 +55,7 @@ RATINGS = ADP_RESOURCE + '/adp-program-ratings'
 ADP_CUSTOMERS = ADP_RESOURCE + '/adp-customers'
 ADP_FILE_DOWNLOAD_LINK = (
     ADP_RESOURCE
-    + '/programs/{customer_id}/get-download?stage={stage}'
+    + '/programs/{customer_id}/download?stage={stage}'
 )
 
 
