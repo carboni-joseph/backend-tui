@@ -9,7 +9,7 @@ from models import (
     ADPCustomer, Coils, SCACustomer,
     CoilAttrs, Coil, Coils, AHAttrs,
     AH, AHs, Stage, Rating, Ratings,
-    RatingAttrs
+    RatingAttrs, RatingRels
 )
 from auth import AuthToken
 
@@ -123,7 +123,12 @@ def get_ratings(for_customer: ADPCustomer) -> Ratings:
     if not data.get('data'):
         raise Exception("No Ratings")
     customer_ratings = [
-        Rating(id=record['id'], attributes=RatingAttrs(**record['attributes']))
+        Rating(
+            id=record['id'],
+            attributes=RatingAttrs(**record['attributes']),
+            relationships=RatingRels(
+                adp_customers={'data': {'id': for_customer.id, 'type': 'adp-customers'}}
+            ))
         for record in data['data'] 
     ]
     customer_ratings.sort(
@@ -317,8 +322,8 @@ def post_new_ratings(customer_id: int, file: str) -> None:
                           f'Status code {resp.status_code}. '
                           f'Message:\n {resp.content.decode()}')
 
-def delete_rating(rating_id: int) -> r.Response:
-    resp = r_delete(url=RATINGS + f'/{rating_id}')
+def delete_rating(rating_id: int, customer_id: int) -> r.Response:
+    resp = r_delete(url=RATINGS + f'/{rating_id}?adp_customer_id={customer_id}')
     if code := resp.status_code != 204:
         raise Exception(f'Error with delete operation. '
                         f'Status: {code}.\n '
