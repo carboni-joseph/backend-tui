@@ -143,9 +143,18 @@ class RatingAttrs(BaseModel):
     capacity2_as_submitted: Optional[float] = None
     hspf2_as_submitted: Optional[float] = None
 
+class Rel(BaseModel):
+    id: int
+    type: str
+class RelObj(BaseModel):
+    data: Rel
+class RatingRels(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    adp_customers: RelObj = Field(alias='adp-customers')
 class Rating(BaseModel):
     id: int
     attributes: RatingAttrs
+    relationships: RatingRels 
 
 class Ratings(BaseModel):
     data: list[Rating]
