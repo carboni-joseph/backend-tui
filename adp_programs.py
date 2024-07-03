@@ -213,7 +213,7 @@ def remove_rating(
         go_back()
         return
     try:
-        delete_rating(rating.id)
+        delete_rating(rating.id, rating.relationships.adp_customers.data.id)
     except Exception as e:
         header_text = urwid.Text(('flash_bad', str(e)))
     else:
@@ -270,9 +270,10 @@ def action_chosen(customer: ADPCustomer, frame: urwid.Frame,
         case Actions.REVIEW_RATINGS:
             try:
                 ratings = get_ratings(for_customer=customer).data
-            except:
+            except Exception as e:
                 flash_text = urwid.Text(('flash_bad', 'No Ratings to Display'))
-                frame.header = urwid.Pile([flash_text, frame.header])
+                flash_detail = urwid.Text(('flash_bad', str(e)))
+                frame.header = urwid.Pile([flash_text, flash_detail, frame.header])
             else:
                 displayable = ['ahrinumber', 'outdoor_model',
                                'indoor_model', 'effective_date']
