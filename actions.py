@@ -53,6 +53,7 @@ AHS = ADP_RESOURCE + '/adp-ah-programs'
 COILS = ADP_RESOURCE + '/adp-coil-programs'
 RATINGS = ADP_RESOURCE + '/adp-program-ratings'
 ADP_CUSTOMERS = ADP_RESOURCE + '/adp-customers'
+MODEL_LOOKUP = ADP_RESOURCE + '/model-lookup'
 ADP_FILE_DOWNLOAD_LINK = (
     ADP_RESOURCE
     + '/programs/{customer_id}/download?stage={stage}'
@@ -242,6 +243,11 @@ def patch_new_coil_status(customer_id: int, coil_id: int,
         }
     }
     return r_patch(url=url, json=payload)
+
+def price_check(customer_id: int, model: str, *args) -> r.Response:
+    query = f'?model_num={model}&customer_id={customer_id}'
+    return r_get(url=MODEL_LOOKUP+query)
+
 
 def post_new_coil(customer_id: int, model: str) -> r.Response:
     data = {

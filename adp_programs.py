@@ -14,7 +14,7 @@ from actions import (
     select_file, get_sca_customers_w_adp_accounts,
     get_air_handlers, patch_new_ah_status,
     post_new_ah, get_ratings, post_new_ratings,
-    delete_rating
+    delete_rating, price_check
 )
 from menus import menu, routing_menu, show_new_screen
 
@@ -163,6 +163,56 @@ def add_new_model(submit_method: Callable,
     ])
 
 
+def do_model_lookup(customer: ADPCustomer):
+    user_input = urwid.Edit('Enter Model Number: ')
+    action = partial(display_price_check, customer, user_input)
+    submit = urwid.Button('Submit', on_press=action)
+    return urwid.ListBox([user_input, urwid.AttrMap(submit, None, focus_map='reversed')])
+
+def display_price_check(customer: ADPCustomer, user_input: urwid.Edit, button):
+    raw_input = user_input.edit_text
+    resp: Response = price_check(customer.id, raw_input)
+    if resp.status_code == 200:
+        body: dict = resp.json()
+        zero_disc_price = body['zero-discount-price']
+        net_price = body['net-price']
+        discount_used = 0
+        if net_price != zero_disc_price:
+            mgd = body.get('material-group-net-price', 0)
+            snp = body.get('snp-price', 0)
+            if mgd == net_price:
+                discount_used = body.get('material-group-discount')
+            if snp == net_price:
+                discount_used = body.get('snp-discount')
+        net_price = f"Pricing\n   ${body['net-price']:,.2f} with discount of {discount_used:0.2f}%"
+        orig_price = f"   Zero Discount Pricing = ${zero_disc_price:,.2f}"
+        features = [
+            f"   {k}: {v}" for k,v in body.items()
+            if k in [
+                'model-number',
+                'series',
+                'tonnage',
+                'width',
+                'depth', 
+                'height',
+                'motor',
+                'heat',
+            ]
+        ]
+        # not a JSONAPI obj with a data key, just the features as keys
+        frame.body = urwid.Filler(
+            urwid.Pile(
+                [urwid.Text(e) for e in [net_price, orig_price, 'Features', *features]]
+            )
+        )
+    else:
+        response_header = urwid.Text(('flash_bad',
+                                    f'{raw_input} is not valid'))
+        response_body = urwid.Text(resp.content)
+        frame.header = urwid.Pile([response_header, frame.header])
+        frame.body = urwid.Filler(urwid.Pile([response_body]))
+
+
 def add_new_coil(customer: ADPCustomer) -> urwid.ListBox:
     return add_new_model(submit_coil_model, customer)
 
@@ -200,8 +250,6 @@ def submit_model(product_type_method: Callable,
     go_back()
     go_back()
     frame.header = urwid.Pile([*results, frame.header])
-    # frame.body = urwid.Filler(urwid.Pile(response_body))
-
 
 def remove_rating(
         rating: Rating,
@@ -359,6 +407,12 @@ def action_chosen(customer: ADPCustomer, frame: urwid.Frame,
                 show_new_screen(frame, new_menu, NAV_STACK)
         case Actions.VIEW_ACCESSORIES:
             ...
+        case Actions.PRICE_CHECK:
+            show_new_screen(
+                frame,
+                partial(do_model_lookup, customer),
+                NAV_STACK
+            )
         case _:
             response = 'No Action taken'
             response_text = urwid.Text(response)

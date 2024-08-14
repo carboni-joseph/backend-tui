@@ -33,6 +33,7 @@ class Actions(StrEnum):
     VIEW_COILS = 'Coils'
     VIEW_AHS = 'Air Handlers'
     VIEW_ACCESSORIES = 'Accessories'
+    PRICE_CHECK = 'Price Check'
 
 
 class CoilAttrs(BaseModel):
