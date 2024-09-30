@@ -1,3 +1,4 @@
+__version__ = 1
 import urwid
 from functools import partial
 from typing import Literal, Callable
@@ -459,7 +460,7 @@ def change_focus(key) -> None:
         
 ## WELCOME SCREEN
 def welcome_screen(next_screen) -> urwid.Filler:
-    msg = """Welcome to the ADP Program Administration Program\n\n
+    msg = f"""Welcome to the ADP Program Administration Program (v{__version__})\n\n
     This program is meant to address our needs with managing ADP programs by interfacing
     directly with the new system until we have a web application interface in place."""
     text = urwid.Text(msg, align='center')
