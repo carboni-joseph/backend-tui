@@ -148,7 +148,7 @@ class DataPassThroughToAction(ParentApp):
         result = action.callback(**self.action_args)
         self.top.footer = urwid.Pile([*result])
 
-    def back_one(self, remove_content=None, update_attr: dict = None):
+    def back_one(self, remove_content=None, update_attr: UpdateAttr = None):
         if self.nav:
             if self.log:
                 self.log.pop()
