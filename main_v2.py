@@ -1,9 +1,11 @@
 import typing
 import urwid
+from dataclasses import dataclass
 
 from collections.abc import Callable, Hashable, MutableSequence
 
 from auth import set_up_token
+from models import ADPCustomer
 
 set_up_token()
 
@@ -26,19 +28,28 @@ from actions import (
 
 type Caption = str | tuple[Hashable, str] | list[str | tuple[Hashable, str]]
 type Callback = Callable[["ActionButton"], typing.Any]
-type Choices = MutableSequence[urwid.Widget]
+type Choices = MutableSequence[MenuOption]
+type Primitive = int | float | str
+
+
+@dataclass
+class UpdateAttr:
+    obj: typing.Any
+    attr: str
+    new_value: Primitive
 
 
 class ActionButton(urwid.Button):
     def __init__(
         self,
-        caption: Caption,
+        option: "MenuOption",
         callback: Callback,
     ) -> None:
-        super().__init__("", on_press=callback, user_data=(caption[-1],))
+        super().__init__("", on_press=callback, user_data=(option,))
         self._w = urwid.AttrMap(
-            urwid.SelectableIcon(caption, 1), None, focus_map="reversed"
+            urwid.SelectableIcon(str(option), 1), None, focus_map="reversed"
         )
+        self.option = option
 
 
 class Action(urwid.WidgetWrap[ActionButton]):
@@ -46,7 +57,8 @@ class Action(urwid.WidgetWrap[ActionButton]):
     parent: "ParentApp"
 
     def __init__(self, name: str, callback: Callable) -> None:
-        super().__init__(ActionButton([" * ", name], self.execute_action))
+        mo = MenuOption(f" * {name}")
+        super().__init__(ActionButton(mo, self.execute_action))
         self.name = name
         self.callback = callback
 
@@ -54,36 +66,49 @@ class Action(urwid.WidgetWrap[ActionButton]):
     def set_parent(cls, parent_app: "ParentApp") -> None:
         cls.parent = parent_app
 
-    def execute_action(self, button: ActionButton, data: typing.Any) -> None:
+    def execute_action(self, button: ActionButton, data: "MenuOption") -> None:
         self.parent.execute_action(self)
 
 
-class Menu(urwid.WidgetWrap[ActionButton]):
+@dataclass
+class MenuOption:
+    title: typing.Optional[str] = None
+    obj: typing.Optional[typing.Any] = None
+    next: typing.Union["Menu", "Action"] = None
+
+    def __str__(self) -> str:
+        return f" > {self.title}"
+
+
+class Menu:
 
     parent: "ParentApp"
 
-    def __init__(self, name: str, choices: Choices) -> None:
-        super().__init__(ActionButton([" > ", name], self.next_menu))
-        self._name = name
-        self.heading = urwid.Text(["\n", name, "\n"])
-        self.choices = choices
-        # create links back to ourself
-        # for child in choices:
-        #     getattr(child, "choices", []).insert(0, self)
+    def __init__(self, title: str, choices: Choices) -> None:
+        self.title = urwid.Text(title)
+        self.choices = list()
+        for choice in choices:
+            match choice.next:
+                case Menu():
+                    button = ActionButton(choice, self.next_menu)
+                case Action():
+                    button = choice.next
+            self.choices.append(button)
 
     def __str__(self) -> str:
-        return self._name.lower().strip().replace(" ", "_")
+        return self.title.text.lower().strip().replace(" ", "_")
 
     @classmethod
     def set_parent(cls, parent_app: "ParentApp") -> None:
         cls.parent = parent_app
 
-    def next_menu(self, button: ActionButton, data: typing.Any) -> None:
-        self.parent.next_menu(self, data)
+    def next_menu(self, button: ActionButton, data: tuple[MenuOption]) -> None:
+        (option_selected,) = data
+        self.parent.next_menu(option_selected)
 
 
 class ParentApp:
-    def next_menu(self, menu: Menu, value_selected: typing.Any) -> None:
+    def next_menu(self, value_selected: MenuOption) -> None:
         pass
 
     def execute_action(self, action: Action) -> None:
@@ -96,79 +121,106 @@ class ParentApp:
 class DataPassThroughToAction(ParentApp):
     def __init__(self, mapping: Menu) -> None:
         self.log = urwid.SimpleFocusListWalker([])
-        self.top = urwid.ListBox(self.log)
+        self.top = urwid.Frame(body=urwid.ListBox(self.log))
+        self.menus = mapping
         self.menu: Menu = None
         self.nav = [mapping]
         self.action_args = dict()
-        self.next_menu(mapping, None)
+        self.next_menu(MenuOption(obj=mapping, next=mapping))
 
     def add_callback_arg(self, new_arg: dict) -> None:
         self.action_args.update(new_arg)
 
-    def next_menu(self, menu: Menu, value_selected: tuple[typing.Any] | None) -> None:
+    def next_menu(self, value_selected: typing.Optional[MenuOption]) -> None:
         if self.log:
             self.log.pop()
-        (data,) = value_selected if value_selected else (None,)
-        self.log.append(urwid.Pile([menu.heading, *menu.choices]))
-        self.top.focus_position = len(self.log) - 1
+        menu = value_selected.next
+        self.log.append(urwid.Pile([menu.title, *menu.choices]))
+        self.top.body.focus_position = len(self.log) - 1
         if self.menu:
-            self.add_callback_arg({str(self.menu): data})
+            self.add_callback_arg({str(self.menu): value_selected.obj})
             self.nav.append(self.menu)
         else:
-            self.add_callback_arg({str(menu): data})
+            self.add_callback_arg({"app": value_selected.obj})
         self.menu = menu
 
     def execute_action(self, action: Action) -> None:
-        action.callback(**self.action_args)
-        self.next_menu(self.menu, None)
-        # if self.inventory >= {"sugar", "lemon", "jug"}:
-        #     response = urwid.Text("You can make lemonade!\n")
-        #     done = ActionButton(" - Joy", exit_program)
-        #     self.log[:] = [response, done]
-        # else:
-        #     self.next_menu(self.menu)
+        result = action.callback(**self.action_args)
+        self.top.footer = urwid.Pile([*result])
 
-    def last_menu(self, key):
-        if key == "backspace":
-            if self.nav:
-                if self.log:
-                    self.log.pop()
-                    menu: Menu = self.nav.pop()
-                    self.log.append(urwid.Pile([menu.heading, *menu.choices]))
-                    self.top.focus_position = len(self.log) - 1
-                    self.menu = menu
-        else:
-            print("\n", key)
+    def back_one(self, remove_content=None, update_attr: dict = None):
+        if self.nav:
+            if self.log:
+                self.log.pop()
+                menu: Menu = self.nav.pop()
+                if remove_content:
+                    rem_i = -1
+                    for i, choice in enumerate(menu.choices):
+                        choice: ActionButton
+                        if choice.option.obj is remove_content:
+                            rem_i = i
+                            break
+                    if rem_i + 1:
+                        menu.choices.pop(rem_i)
+                self.log.append(urwid.Pile([menu.title, *menu.choices]))
+                self.top.body.focus_position = len(self.log) - 1
+                self.top.header = None
+                self.top.footer = None
+                self.menu = menu
+
+    def custom_switches(self, key):
+        match key:
+            case "backspace":
+                self.back_one()
+            case "esc":
+                exit_program()
 
 
-def exit_program(button: ActionButton) -> typing.NoReturn:
+class ADPManagement:
+
+    def __init__(self) -> None:
+        adp_customers = get_sca_customers_w_adp_accounts()
+        adp_customers.sort(key=lambda x: x.sca_name)
+        actions = [
+            MenuOption(next=Action("Del Customer", self.soft_del_customer)),
+        ]
+        sca_customers = [
+            MenuOption(
+                customer.sca_name,
+                customer,
+                Menu(
+                    "ADP Customer",
+                    [
+                        MenuOption(
+                            adp_name.adp_alias, adp_name, Menu("Action", actions)
+                        )
+                        for adp_name in customer.adp_objs
+                    ],
+                ),
+            )
+            for customer in adp_customers
+        ]
+        map_top = Menu("SCA Customers", sca_customers)
+        self.app = DataPassThroughToAction(map_top)
+        Menu.set_parent(self.app)
+        Action.set_parent(self.app)
+        urwid.MainLoop(
+            self.app.top,
+            palette=[("reversed", "standout", "")],
+            unhandled_input=self.app.custom_switches,
+        ).run()
+
+    def soft_del_customer(self, adp_customer: ADPCustomer, **kwargs):
+        self.app.back_one(remove_content=adp_customer)
+        return [urwid.Text(f"removed {adp_customer.adp_alias}")]
+
+
+def exit_program() -> typing.NoReturn:
     raise urwid.ExitMainLoop()
 
 
-def print_cb(**kwargs) -> None:
-    for k, v in kwargs.items():
-        print(f"{k} -> {v}")
+def show_args(**kwargs):
+    return [urwid.Text(f"{k} -> {v}") for k, v in kwargs.items()]
 
 
-adp_customers = get_sca_customers_w_adp_accounts()
-adp_customers.sort(key=lambda x: x.sca_name)
-
-sca_customer_menus = list()
-actions = [Action("Price Check", print_cb)]
-for customer in adp_customers:
-    sub_menu = Menu(
-        customer.sca_name,
-        [Menu(alias.adp_alias, actions) for alias in customer.adp_objs],
-    )
-    sca_customer_menus.append(sub_menu)
-
-map_top = Menu("SCA Customers", sca_customer_menus)
-management = DataPassThroughToAction(map_top)
-Menu.set_parent(management)
-Action.set_parent(management)
-
-urwid.MainLoop(
-    management.top,
-    palette=[("reversed", "standout", "")],
-    unhandled_input=management.last_menu,
-).run()
+ADPManagement()
