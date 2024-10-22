@@ -1,11 +1,11 @@
-import typing
+from typing import Optional, Any, Union, NoReturn
 import urwid
 from dataclasses import dataclass
 
 from collections.abc import Callable, Hashable, MutableSequence
 
 from auth import set_up_token
-from models import ADPCustomer
+from models import ADPCustomer, Coil, Stage, AH, Rating
 
 set_up_token()
 
@@ -26,15 +26,15 @@ from actions import (
     price_check,
 )
 
-type Caption = str | tuple[Hashable, str] | list[str | tuple[Hashable, str]]
-type Callback = Callable[["ActionButton"], typing.Any]
+type Callback = Callable[["ActionButton"], Any]
 type Choices = MutableSequence[MenuOption]
 type Primitive = int | float | str
+type Footer = list[urwid.Widget]
 
 
 @dataclass
 class UpdateAttr:
-    obj: typing.Any
+    obj: Any
     attr: str
     new_value: Primitive
 
@@ -72,9 +72,9 @@ class Action(urwid.WidgetWrap[ActionButton]):
 
 @dataclass
 class MenuOption:
-    title: typing.Optional[str] = None
-    obj: typing.Optional[typing.Any] = None
-    next: typing.Union["Menu", "Action"] = None
+    title: Optional[str] = None
+    obj: Optional[Any] = None
+    next: Union["Menu", "Action"] = None
 
     def __str__(self) -> str:
         return f" > {self.title}"
@@ -131,7 +131,7 @@ class DataPassThroughToAction(ParentApp):
     def add_callback_arg(self, new_arg: dict) -> None:
         self.action_args.update(new_arg)
 
-    def next_menu(self, value_selected: typing.Optional[MenuOption]) -> None:
+    def next_menu(self, value_selected: Optional[MenuOption]) -> None:
         if self.log:
             self.log.pop()
         menu = value_selected.next
@@ -183,6 +183,9 @@ class ADPManagement:
         adp_customers.sort(key=lambda x: x.sca_name)
         actions = [
             MenuOption(next=Action("Del Customer", self.soft_del_customer)),
+            MenuOption(next=Action("Coils", self.gen_coil_menus)),
+            MenuOption(next=Action("Air Handlers", self.gen_ah_menus)),
+            MenuOption(next=Action("Ratings", self.gen_ratings_menus)),
         ]
         sca_customers = [
             MenuOption(
@@ -214,13 +217,23 @@ class ADPManagement:
         self.app.back_one(remove_content=adp_customer)
         return [urwid.Text(f"removed {adp_customer.adp_alias}")]
 
+    def update_coil_status(self, products: Coil, new_stage: Stage, **kwargs): ...
 
-def exit_program() -> typing.NoReturn:
+    def update_ah_status(self, products: AH, new_stage: Stage, **kwargs): ...
+
+    def gen_coil_menus(self, adp_customer: ADPCustomer, **kwargs) -> Footer:
+
+        return [urwid.Text("get coils")]
+
+    def gen_ah_menus(self, adp_customer: ADPCustomer, **kwargs) -> Footer:
+        return [urwid.Text("get ahs")]
+
+    def gen_ratings_menus(self, adp_customer: ADPCustomer, **kwargs) -> Footer:
+        return [urwid.Text("get ratings")]
+
+
+def exit_program() -> NoReturn:
     raise urwid.ExitMainLoop()
-
-
-def show_args(**kwargs):
-    return [urwid.Text(f"{k} -> {v}") for k, v in kwargs.items()]
 
 
 ADPManagement()
