@@ -1,9 +1,10 @@
 import re
 import os
 from pathlib import Path
+from typing import Callable
 import requests as r
 import configparser
-from functools import partial
+from functools import partial, wraps
 from tkinter import Tk, filedialog
 from models import (
     ADPCustomer,
@@ -75,10 +76,25 @@ if VERIFY:
     if path := configs.get("SSL", "path", fallback=None):
         VERIFY = path
 
-r_get = partial(r.get, headers=AuthToken.header, verify=VERIFY)
-r_post = partial(r.post, headers=AuthToken.header, verify=VERIFY)
-r_patch = partial(r.patch, headers=AuthToken.header, verify=VERIFY)
-r_delete = partial(r.delete, headers=AuthToken.header, verify=VERIFY)
+
+def retry(func: Callable) -> Callable:
+    @wraps(func)
+    def inner(*args, **kwargs):
+        resp: r.Response = func(*args, **kwargs)
+        if resp.status_code == 401:
+            reset_request_methods()
+            resp = func(*args, **kwargs)
+            if resp.status_code == 401:
+                raise Exception("Unable to authenticate")
+        return resp
+
+    return inner
+
+
+r_get = partial(retry(r.get), headers=AuthToken.header, verify=VERIFY)
+r_post = partial(retry(r.post), headers=AuthToken.header, verify=VERIFY)
+r_patch = partial(retry(r.patch), headers=AuthToken.header, verify=VERIFY)
+r_delete = partial(retry(r.delete), headers=AuthToken.header, verify=VERIFY)
 
 
 class FileSaveError(Exception):
@@ -192,32 +208,28 @@ def get_sca_customers_w_adp_accounts(version: int = 1) -> list[SCACustomer]:
                     SCACustomer(sca_name=sca_name, adp_objs=adp_customers_selected)
                 )
         case 2:
-            pass
+            v2_adp_resource = "/v2/vendors/adp"
+            sub_resource = "/vendor-customers"
+            page_num = "page_number=0"
+            includes = "include=customer-location-mapping.customer-locations.customers"
+            url = f"{BACKEND_URL}{v2_adp_resource}{sub_resource}?{includes}&{page_num}"
+            data = r_get(url=url).json()
     return result
 
 
 def reset_request_methods() -> None:
     AuthToken.get_new_token()
     global r_get, r_post, r_patch, r_delete
-    r_get = partial(r.get, headers=AuthToken.header, verify=VERIFY)
-    r_post = partial(r.post, headers=AuthToken.header, verify=VERIFY)
-    r_patch = partial(r.patch, headers=AuthToken.header, verify=VERIFY)
-    r_delete = partial(r.delete, headers=AuthToken.header, verify=VERIFY)
+    r_get = partial(retry(r.get), headers=AuthToken.header, verify=VERIFY)
+    r_post = partial(retry(r.post), headers=AuthToken.header, verify=VERIFY)
+    r_patch = partial(retry(r.patch), headers=AuthToken.header, verify=VERIFY)
+    r_delete = partial(retry(r.delete), headers=AuthToken.header, verify=VERIFY)
 
 
 def request_dl_link(customer_id: int, stage: Stage) -> str:
     url = ADP_FILE_DOWNLOAD_LINK.format(customer_id=customer_id, stage=stage.value)
-    resp = r_post(url=url)
-    if resp.status_code == 401:
-        try:
-            reset_request_methods()
-        except Exception as e:
-            print("unable to authenticate with the server")
-            raise e
-        else:
-            resp = r_get(url=url)
-
-    elif not resp.status_code == 200:
+    resp: r.Response = r_post(url=url)
+    if not resp.status_code == 200:
         raise Exception(
             "Unable to obtain download link.\n" f"Message: {resp.content.decode()}"
         )
@@ -226,7 +238,7 @@ def request_dl_link(customer_id: int, stage: Stage) -> str:
 
 def download_file(customer_id: str, stage: Stage) -> None:
     rel_link = request_dl_link(customer_id, stage)
-    resp = r_get(BACKEND_URL + rel_link)
+    resp: r.Response = r_get(BACKEND_URL + rel_link)
     if resp.status_code != 200:
         raise Exception("unable to download file")
     fn_match: re.Match | None = re.search(
@@ -310,7 +322,7 @@ def post_new_ratings(customer_id: int, file: str) -> None:
         raise UploadError("no file selected")
     with open(file, "rb") as fh:
         file_data = fh.read()
-    resp = r_post(
+    resp: r.Response = r_post(
         url=BACKEND_URL + f"/vendors/adp/adp-program-ratings/{customer_id}",
         files={
             "ratings_file": (
@@ -329,7 +341,9 @@ def post_new_ratings(customer_id: int, file: str) -> None:
 
 
 def delete_rating(rating_id: int, customer_id: int) -> r.Response:
-    resp = r_delete(url=RATINGS + f"/{rating_id}?adp_customer_id={customer_id}")
+    resp: r.Response = r_delete(
+        url=RATINGS + f"/{rating_id}?adp_customer_id={customer_id}"
+    )
     if code := resp.status_code != 204:
         raise Exception(
             f"Error with delete operation. "
