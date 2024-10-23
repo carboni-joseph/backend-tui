@@ -107,72 +107,88 @@ class UploadError(Exception):
     """Exception for an error in uploading a file"""
 
 
-def get_coils(for_customer: ADPCustomer) -> Coils:
-    resp = r_get(url=ADP_CUSTOMERS + f"/{for_customer.id}/adp-coil-programs")
-    data: dict = resp.json()
-    if not data.get("data"):
-        raise Exception("No Coils")
-    customer_coils = [
-        Coil(id=record["id"], attributes=CoilAttrs(**record["attributes"]))
-        for record in data["data"]
-    ]
-    customer_coils.sort(
-        key=lambda coil: (
-            coil.attributes.stage,
-            coil.attributes.category,
-            coil.attributes.tonnage,
-            coil.attributes.width,
-        )
-    )
-    return Coils(data=customer_coils)
+def get_coils(for_customer: ADPCustomer, version: int = 1) -> Coils:
+    match version:
+        case 1:
+            url = ADP_CUSTOMERS + f"/{for_customer.id}/adp-coil-programs"
+            resp: r.Response = r_get(url)
+            data: dict = resp.json()
+            if not data.get("data"):
+                raise Exception("No Coils")
+            customer_coils = [
+                Coil(id=record["id"], attributes=CoilAttrs(**record["attributes"]))
+                for record in data["data"]
+            ]
+            customer_coils.sort(
+                key=lambda coil: (
+                    coil.attributes.stage,
+                    coil.attributes.category,
+                    coil.attributes.tonnage,
+                    coil.attributes.width,
+                )
+            )
+            return Coils(data=customer_coils)
+        case 2:
+            pass
 
 
-def get_air_handlers(for_customer: ADPCustomer) -> AHs:
-    resp = r_get(url=ADP_CUSTOMERS + f"/{for_customer.id}/adp-ah-programs")
-    data: dict = resp.json()
-    if not data.get("data"):
-        raise Exception("No Air Handlers")
-    customer_ahs = [
-        AH(id=record["id"], attributes=AHAttrs(**record["attributes"]))
-        for record in data["data"]
-    ]
-    customer_ahs.sort(
-        key=lambda ah: (
-            ah.attributes.stage,
-            ah.attributes.category,
-            ah.attributes.tonnage,
-            ah.attributes.width,
-        )
-    )
+def get_air_handlers(for_customer: ADPCustomer, version: int = 1) -> AHs:
+    match version:
+        case 1:
+            url = ADP_CUSTOMERS + f"/{for_customer.id}/adp-ah-programs"
+            resp: r.Response = r_get(url)
+            data: dict = resp.json()
+            if not data.get("data"):
+                raise Exception("No Air Handlers")
+            customer_ahs = [
+                AH(id=record["id"], attributes=AHAttrs(**record["attributes"]))
+                for record in data["data"]
+            ]
+            customer_ahs.sort(
+                key=lambda ah: (
+                    ah.attributes.stage,
+                    ah.attributes.category,
+                    ah.attributes.tonnage,
+                    ah.attributes.width,
+                )
+            )
+        case 2:
+            pass
     return AHs(data=customer_ahs)
 
 
-def get_ratings(for_customer: ADPCustomer) -> Ratings:
-    resp = r_get(url=ADP_CUSTOMERS + f"/{for_customer.id}/adp-program-ratings")
-    data: dict = resp.json()
-    if not data.get("data"):
-        raise Exception("No Ratings")
-    customer_ratings = [
-        Rating(
-            id=record["id"],
-            attributes=RatingAttrs(**record["attributes"]),
-            relationships=RatingRels(
-                adp_customers={"data": {"id": for_customer.id, "type": "adp-customers"}}
-            ),
-        )
-        for record in data["data"]
-    ]
-    customer_ratings.sort(
-        key=lambda rating: (
-            rating.attributes.outdoor_model,
-            rating.attributes.indoor_model,
-        )
-    )
+def get_ratings(for_customer: ADPCustomer, version: int = 1) -> Ratings:
+    match version:
+        case 1:
+            url = ADP_CUSTOMERS + f"/{for_customer.id}/adp-program-ratings"
+            resp: r.Response = r_get(url)
+            data: dict = resp.json()
+            if not data.get("data"):
+                raise Exception("No Ratings")
+            customer_ratings = [
+                Rating(
+                    id=record["id"],
+                    attributes=RatingAttrs(**record["attributes"]),
+                    relationships=RatingRels(
+                        adp_customers={
+                            "data": {"id": for_customer.id, "type": "adp-customers"}
+                        }
+                    ),
+                )
+                for record in data["data"]
+            ]
+            customer_ratings.sort(
+                key=lambda rating: (
+                    rating.attributes.outdoor_model,
+                    rating.attributes.indoor_model,
+                )
+            )
+        case 2:
+            pass
     return Ratings(data=customer_ratings)
 
 
 def get_sca_customers_w_adp_accounts(version: int = 1) -> list[SCACustomer]:
-    # NOTE the API expects JSON:API-like query params
     match version:
         case 1:
             page_num = "page_number=0"
@@ -180,12 +196,7 @@ def get_sca_customers_w_adp_accounts(version: int = 1) -> list[SCACustomer]:
             fields = "fields_adp_customers=customers,adp-alias"
             query_params = "&".join((page_num, include, fields))
             full_url = ADP_CUSTOMERS + f"?{query_params}"
-            resp = r_get(url=full_url)
-            if resp.status_code == 401:
-                reset_request_methods()
-                resp = r_get(url=full_url)
-                if resp.status_code == 401:
-                    raise Exception("Unable to authenticate")
+            resp: r.Response = r_get(url=full_url)
             payload = resp.json()
             adp_customers = {
                 r["id"]: (
@@ -208,12 +219,63 @@ def get_sca_customers_w_adp_accounts(version: int = 1) -> list[SCACustomer]:
                     SCACustomer(sca_name=sca_name, adp_objs=adp_customers_selected)
                 )
         case 2:
-            v2_adp_resource = "/v2/vendors/adp"
+            # v2_adp_resource = "/v2/vendors/adp"
+            v2_adp_resource = "/v2/vendors/TEST_VENDOR"
             sub_resource = "/vendor-customers"
             page_num = "page_number=0"
             includes = "include=customer-location-mapping.customer-locations.customers"
             url = f"{BACKEND_URL}{v2_adp_resource}{sub_resource}?{includes}&{page_num}"
-            data = r_get(url=url).json()
+            resp: r.Response = r_get(url=url)
+            resp_data = resp.json()
+            data, included = resp_data["data"], resp_data["included"]
+            customers = {
+                r["id"]: r["attributes"]["name"]
+                for r in included
+                if r["type"] == "customers"
+            }
+            customer_by_location = {
+                r["id"]: r["relationships"]["customers"]["data"]["id"]
+                for r in included
+                if r["type"] == "customer-locations"
+            }
+            location_by_mapping = {
+                r["id"]: r["relationships"]["customer-locations"]["data"]["id"]
+                for r in included
+                if r["type"] == "customer-location-mapping"
+            }
+            adp_customers_w_mapping = {
+                r["id"]: (
+                    r["attributes"]["name"],
+                    [
+                        mapping["id"]
+                        for mapping in r["relationships"]["customer-location-mapping"][
+                            "data"
+                        ]
+                    ],
+                )
+                for r in data
+                if r["relationships"]["customer-location-mapping"]["data"]
+            }
+            result = []
+            for sca_id, sca_name in customers.items():
+                locations = [
+                    id_
+                    for id_, customer_id in customer_by_location.items()
+                    if customer_id == sca_id
+                ]
+                mapping_ids_for_locations = [
+                    id_
+                    for id_, location_id in location_by_mapping.items()
+                    if location_id in locations
+                ]
+                adp_customers_selected = [
+                    ADPCustomer(id=id_, adp_alias=v[0])
+                    for id_, v in adp_customers_w_mapping.items()
+                    if set(v[1]) <= set(mapping_ids_for_locations)
+                ]
+                result.append(
+                    SCACustomer(sca_name=sca_name, adp_objs=adp_customers_selected)
+                )
     return result
 
 
