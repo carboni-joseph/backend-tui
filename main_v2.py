@@ -131,7 +131,7 @@ class DataPassThroughToAction(ParentApp):
     def add_callback_arg(self, new_arg: dict) -> None:
         self.action_args.update(new_arg)
 
-    def next_menu(self, value_selected: Optional[MenuOption]) -> None:
+    def next_menu(self, value_selected: MenuOption) -> None:
         if self.log:
             self.log.pop()
         menu = value_selected.next
@@ -179,13 +179,14 @@ class DataPassThroughToAction(ParentApp):
 class ADPManagement:
 
     def __init__(self) -> None:
-        adp_customers = get_sca_customers_w_adp_accounts()
+        adp_customers = get_sca_customers_w_adp_accounts(2)
         adp_customers.sort(key=lambda x: x.sca_name)
         actions = [
-            MenuOption(next=Action("Del Customer", self.soft_del_customer)),
+            MenuOption(next=Action("Price Check", None)),
             MenuOption(next=Action("Coils", self.gen_coil_menus)),
             MenuOption(next=Action("Air Handlers", self.gen_ah_menus)),
             MenuOption(next=Action("Ratings", self.gen_ratings_menus)),
+            MenuOption(next=Action("Accessories", None)),
         ]
         sca_customers = [
             MenuOption(
@@ -217,18 +218,23 @@ class ADPManagement:
         self.app.back_one(remove_content=adp_customer)
         return [urwid.Text(f"removed {adp_customer.adp_alias}")]
 
-    def update_coil_status(self, products: Coil, new_stage: Stage, **kwargs): ...
+    def update_coil_status(self, products: Coil, new_stage: Stage, **kwargs):
+        pass
 
-    def update_ah_status(self, products: AH, new_stage: Stage, **kwargs): ...
+    def update_ah_status(self, products: AH, new_stage: Stage, **kwargs):
+        pass
 
     def gen_coil_menus(self, adp_customer: ADPCustomer, **kwargs) -> Footer:
-
+        coils = get_coils(for_customer=adp_customer, version=2)
+        self.app.top.body = urwid.SolidFill("\N{MEDIUM SHADE}")
         return [urwid.Text("get coils")]
 
     def gen_ah_menus(self, adp_customer: ADPCustomer, **kwargs) -> Footer:
+        ahs = get_air_handlers(for_customer=adp_customer, version=2)
         return [urwid.Text("get ahs")]
 
     def gen_ratings_menus(self, adp_customer: ADPCustomer, **kwargs) -> Footer:
+        ratings = get_ratings(for_customer=adp_customer, version=2)
         return [urwid.Text("get ratings")]
 
 
