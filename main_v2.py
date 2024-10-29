@@ -25,6 +25,7 @@ from actions import (
     delete_rating,
     price_check,
 )
+from menus import menu_v2
 
 type Callback = Callable[["ActionButton"], Any]
 type Choices = MutableSequence[MenuOption]
@@ -226,8 +227,13 @@ class ADPManagement:
 
     def gen_coil_menus(self, adp_customer: ADPCustomer, **kwargs) -> Footer:
         coils = get_coils(for_customer=adp_customer, version=2)
-        self.app.top.body = urwid.SolidFill("\N{MEDIUM SHADE}")
-        return [urwid.Text("get coils")]
+        coil_menu_options = [
+            MenuOption(coil.attributes.model_number, coil, self.update_coil_status)
+            for coil in coils.data
+        ]
+        new_menu = Menu(f"{adp_customer.adp_alias}'s Coils", coil_menu_options)
+        self.app.next_menu(MenuOption(next=new_menu))
+        return [urwid.Text("coils menu")]
 
     def gen_ah_menus(self, adp_customer: ADPCustomer, **kwargs) -> Footer:
         ahs = get_air_handlers(for_customer=adp_customer, version=2)
