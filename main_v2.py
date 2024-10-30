@@ -227,12 +227,13 @@ class ADPManagement:
 
     def gen_coil_menus(self, adp_customer: ADPCustomer, **kwargs) -> Footer:
         coils = get_coils(for_customer=adp_customer, version=2)
-        coil_menu_options = [
-            MenuOption(coil.attributes.model_number, coil, self.update_coil_status)
-            for coil in coils.data
-        ]
-        new_menu = Menu(f"{adp_customer.adp_alias}'s Coils", coil_menu_options)
-        self.app.next_menu(MenuOption(next=new_menu))
+        self.app.top.body = urwid.Text(coils)
+        # coil_menu_options = [
+        #     MenuOption(coil.attributes.model_number, coil, self.update_coil_status)
+        #     for coil in coils.data
+        # ]
+        # new_menu = Menu(f"{adp_customer.adp_alias}'s Coils", coil_menu_options)
+        # self.app.next_menu(MenuOption(next=new_menu))
         return [urwid.Text("coils menu")]
 
     def gen_ah_menus(self, adp_customer: ADPCustomer, **kwargs) -> Footer:

@@ -41,6 +41,29 @@ class Actions(StrEnum):
     PRICE_CHECK = "Price Check"
 
 
+class VendorProductAttrs(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, protected_namespaces={})
+    vendor_product_identifier: str
+    vendor_product_description: str
+
+
+class VendorProduct(BaseModel):
+    id: int
+    attributes: VendorProductAttrs
+
+
+class VendorProductAttrAttrs(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, protected_namespaces={})
+    attr: str
+    type: str
+    value: str
+
+
+class VendorProductAttr(BaseModel):
+    id: int
+    attributes: VendorProductAttrAttrs
+
+
 class CoilAttrs(BaseModel):
     model_config = ConfigDict(populate_by_name=True, protected_namespaces={})
     category: str

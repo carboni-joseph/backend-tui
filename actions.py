@@ -129,16 +129,25 @@ def get_coils(for_customer: ADPCustomer, version: int = 1) -> Coils:
             )
             return Coils(data=customer_coils)
         case 2:
-            url = BACKEND_URL + f"/v2/vendors/adp/vendor-products/{for_customer.id}"
-            include = "?"
-            resp: r.Response = r_get(url)
+            product_url = (
+                BACKEND_URL + f"/v2/vendors/adp/vendor-customers/{for_customer.id}"
+            )
+            includes = [
+                "vendor-pricing-by-class.vendor-pricing-classes",
+                "vendor-pricing-by-class.vendor-products.vendor-product-attrs",
+                "vendor-pricing-by-customer.vendor-products.vendor-product-attrs",
+            ]
+            include = "include=" + "&include=".join(incl for incl in includes)
+            resp: r.Response = r_get(f"{product_url}?{include}")
             data: dict = resp.json()
             if not data.get("data"):
                 raise Exception("No Coils")
-            customer_coils = [
-                Coil(id=record["id"], attributes=CoilAttrs(**record["attributes"]))
-                for record in data["data"]
-            ]
+            return data
+
+            # customer_coils = [
+            #     Coil(id=record["id"], attributes=CoilAttrs(**record["attributes"]))
+            #     for record in data["data"]
+            # ]
 
 
 def get_air_handlers(for_customer: ADPCustomer, version: int = 1) -> AHs:
