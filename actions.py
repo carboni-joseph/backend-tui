@@ -24,6 +24,7 @@ from models import (
 )
 from auth import AuthToken
 
+VENDOR = "TEST_VENDOR"
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 configs = configparser.ConfigParser()
 configs.read("config.ini")
@@ -130,7 +131,7 @@ def get_coils(for_customer: ADPCustomer, version: int = 1) -> Coils:
             return Coils(data=customer_coils)
         case 2:
             product_url = (
-                BACKEND_URL + f"/v2/vendors/adp/vendor-customers/{for_customer.id}"
+                BACKEND_URL + f"/v2/vendors/{VENDOR}/vendor-customers/{for_customer.id}"
             )
             includes = [
                 "vendor-pricing-by-class.vendor-pricing-classes",
@@ -237,8 +238,7 @@ def get_sca_customers_w_adp_accounts(version: int = 1) -> list[SCACustomer]:
                     SCACustomer(sca_name=sca_name, adp_objs=adp_customers_selected)
                 )
         case 2:
-            # v2_adp_resource = "/v2/vendors/adp"
-            v2_adp_resource = "/v2/vendors/TEST_VENDOR"
+            v2_adp_resource = f"/v2/vendors/{VENDOR}"
             sub_resource = "/vendor-customers"
             page_num = "page_number=0"
             includes = "include=customer-location-mapping.customer-locations.customers"
