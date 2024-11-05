@@ -1,6 +1,7 @@
 from typing import Optional, Any, Union, NoReturn
 import urwid
 from dataclasses import dataclass
+import json
 
 from collections.abc import Callable, Hashable, MutableSequence
 
@@ -227,7 +228,8 @@ class ADPManagement:
 
     def gen_coil_menus(self, adp_customer: ADPCustomer, **kwargs) -> Footer:
         coils = get_coils(for_customer=adp_customer, version=2)
-        self.app.top.body = urwid.Text(coils)
+        with open("coils-test.json", "w") as fh:
+            json.dump(coils, fh, indent=2)
         # coil_menu_options = [
         #     MenuOption(coil.attributes.model_number, coil, self.update_coil_status)
         #     for coil in coils.data
