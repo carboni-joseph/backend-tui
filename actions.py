@@ -1,9 +1,12 @@
 import re
 import os
+import json
 from pathlib import Path
 from typing import Callable
+from collections import defaultdict
 import requests as r
 import configparser
+from enum import StrEnum
 from functools import partial, wraps
 from tkinter import Tk, filedialog
 from models import (
@@ -25,9 +28,98 @@ from models import (
 from auth import AuthToken
 
 VENDOR = "TEST_VENDOR"
+
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 configs = configparser.ConfigParser()
 configs.read("config.ini")
+
+
+class ADPPricingClasses(StrEnum):
+    ZERO_DISCOUNT = "ZERO_DISCOUNT"
+    STRATEGY_PRICING = "STRATEGY_PRICING"
+
+
+def restructure_included(included: list[dict], primary: str, ids: list[int] = None):
+    structured = defaultdict(dict)
+    primary_objs = []
+    for item in included:
+        if item["type"] == primary:
+            if ids:
+                if item["id"] in ids:
+                    primary_objs.append(item)
+            else:
+                primary_objs.append(item)
+
+    for item in primary_objs:
+        structured[item["id"]] = {
+            attr: value for attr, value in item["attributes"].items()
+        }
+        for rel_key, rel_item in item["relationships"].items():
+            if "data" in rel_item:
+                related_ids = []
+                match rel_item["data"]:
+                    case dict():
+                        related_ids.append(rel_item["data"]["id"])
+                    case list():
+                        if not rel_item["data"]:
+                            continue
+                        for data_item in rel_item["data"]:
+                            related_ids.append(data_item["id"])
+                structured[item["id"]].setdefault(rel_key, {})
+                structured[item["id"]][rel_key] |= restructure_included(
+                    included, rel_key, related_ids
+                )
+
+    return {k: v for k, v in structured.items() if v}
+
+
+def restructure_pricing_by_class(obj: dict) -> dict:
+    result = dict()
+    for price_class_mapping in obj.values():
+        price_class_mapping: dict[str, None | dict]
+        for price_class in price_class_mapping["vendor-pricing-classes"].values():
+            price_class: dict[str, None | dict | str]
+            if price_class["name"] == ADPPricingClasses.ZERO_DISCOUNT:
+                for product_price in price_class["vendor-pricing-by-class"].values():
+                    product_price: dict[str, int | None | dict]
+                    id_, product_info = product_price["vendor-products"].popitem()
+                    product_attrs: dict = product_info.get("vendor-product-attrs", {})
+                    if product_attrs:
+                        product_attrs = {
+                            attr["attr"]: attr["value"]
+                            for attr in product_attrs.values()
+                        }
+                    product_attrs |= {
+                        "model_number": product_info["vendor-product-identifier"],
+                        "description": product_info["vendor-product-description"],
+                        "price": product_price["price"],
+                    }
+
+                    result.update({id_: product_attrs})
+    return result
+
+
+def restructure_pricing_by_customer(obj: dict) -> dict:
+    result = dict()
+    for product_price in obj.values():
+        product_price: dict[str, int | bool | dict | None]
+        product: dict
+        id_, product = product_price["vendor-products"].popitem()
+        product_attrs: dict = product.get("vendor-product-attrs", {})
+        if product_attrs:
+            product_attrs = {
+                attr["attr"]: attr["value"] for attr in product_attrs.values()
+            }
+        product_attrs |= {
+            "model_number": product["vendor-product-identifier"],
+            "description": product["vendor-product-description"],
+            "price": product_price["price"],
+        }
+        if product_price["use-as-override"]:
+            result.update({id_: product_attrs})
+        else:
+            result.update({f"{id_} override": product_attrs})
+    return result
 
 
 def select_file() -> str:
@@ -134,21 +226,37 @@ def get_coils(for_customer: ADPCustomer, version: int = 1) -> Coils:
                 BACKEND_URL + f"/v2/vendors/{VENDOR}/vendor-customers/{for_customer.id}"
             )
             includes = [
-                "vendor-pricing-by-class.vendor-pricing-classes",
-                "vendor-pricing-by-class.vendor-products.vendor-product-attrs",
+                "vendor-customer-pricing-classes.vendor-pricing-classes"
+                ".vendor-pricing-by-class.vendor-products.vendor-product-attrs",
                 "vendor-pricing-by-customer.vendor-products.vendor-product-attrs",
             ]
-            include = "include=" + "&include=".join(incl for incl in includes)
-            resp: r.Response = r_get(f"{product_url}?{include}")
+            include = "include=" + ",".join(incl for incl in includes)
+            filters = {
+                "filter_vendor_pricing_classes__name": [
+                    ADPPricingClasses.ZERO_DISCOUNT,
+                    ADPPricingClasses.STRATEGY_PRICING,
+                ]
+            }
+            filters_formatted = "&".join(
+                f"{k}={','.join(i for i in v)}" for k, v in filters.items()
+            )
+            query_params = "&".join(j for j in (include, filters_formatted))
+            resp: r.Response = r_get(f"{product_url}?{query_params}")
             data: dict = resp.json()
+            with open("resp.json", "w") as fh:
+                json.dump(data, fh, indent=2)
             if not data.get("data"):
                 raise Exception("No Coils")
-            return data
 
-            # customer_coils = [
-            #     Coil(id=record["id"], attributes=CoilAttrs(**record["attributes"]))
-            #     for record in data["data"]
-            # ]
+            includes_pricing_classes = restructure_included(
+                data["included"], "vendor-customer-pricing-classes"
+            )
+            includes_pricing_by_customer = restructure_included(
+                data["included"], "vendor-pricing-by-customer"
+            )
+            result = restructure_pricing_by_class(includes_pricing_classes)
+            result |= restructure_pricing_by_customer(includes_pricing_by_customer)
+            return result
 
 
 def get_air_handlers(for_customer: ADPCustomer, version: int = 1) -> AHs:
