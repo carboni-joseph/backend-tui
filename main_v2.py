@@ -229,7 +229,7 @@ class ADPManagement:
     def gen_coil_menus(self, adp_customer: ADPCustomer, **kwargs) -> Footer:
         coils = get_coils(for_customer=adp_customer, version=2)
         with open("coils-test.json", "w") as fh:
-            json.dump(coils, fh, indent=2)
+            json.dump(coils.model_dump(), fh, indent=2)
         # coil_menu_options = [
         #     MenuOption(coil.attributes.model_number, coil, self.update_coil_status)
         #     for coil in coils.data

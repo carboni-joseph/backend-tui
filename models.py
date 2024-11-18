@@ -94,13 +94,46 @@ class CoilAttrs(BaseModel):
     stage: str
 
 
+class CoilAttrsV2(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, protected_namespaces={})
+    category: str
+    model_number: str = Field(alias="model-number")
+    mpg: str
+    series: str
+    tonnage: int
+    pallet_qty: int = Field(alias="pallet-qty")
+    width: float
+    depth: Optional[float] = None
+    length: Optional[float] = None
+    height: float
+    weight: int
+    metering: str
+    cabinet: str
+    price: int
+    effective_date: datetime = Field(default=None, alias="effective-date")
+
+    def model_post_init(self, __context):
+        self.price = int(self.price / 100)
+        self.effective_date: str = str(self.effective_date)
+        return super().model_post_init(__context)
+
+
 class Coil(BaseModel):
     id: int
     attributes: CoilAttrs
 
 
+class CoilV2(BaseModel):
+    id: int
+    attributes: CoilAttrsV2
+
+
 class Coils(BaseModel):
     data: list[Coil]
+
+
+class CoilsV2(BaseModel):
+    data: list[CoilV2]
 
 
 class AHAttrs(BaseModel):

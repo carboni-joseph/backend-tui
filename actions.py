@@ -1,6 +1,7 @@
 import re
 import os
 import json
+from time import sleep
 from pathlib import Path
 from typing import Callable
 from collections import defaultdict
@@ -14,8 +15,11 @@ from models import (
     Coils,
     SCACustomer,
     CoilAttrs,
+    CoilAttrsV2,
     Coil,
     Coils,
+    CoilV2,
+    CoilsV2,
     AHAttrs,
     AH,
     AHs,
@@ -27,7 +31,8 @@ from models import (
 )
 from auth import AuthToken
 
-VENDOR = "TEST_VENDOR"
+# VENDOR = "TEST_VENDOR"
+VENDOR = "adp"
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 configs = configparser.ConfigParser()
@@ -114,6 +119,7 @@ def restructure_pricing_by_customer(obj: dict) -> dict:
             "model_number": product["vendor-product-identifier"],
             "description": product["vendor-product-description"],
             "price": product_price["price"],
+            "effective_date": product_price["effective-date"],
         }
         if product_price["use-as-override"]:
             result.update({id_: product_attrs})
@@ -162,7 +168,6 @@ ADP_CUSTOMERS = ADP_RESOURCE + "/adp-customers"
 MODEL_LOOKUP = ADP_RESOURCE + "/model-lookup"
 ADP_FILE_DOWNLOAD_LINK = ADP_RESOURCE + "/programs/{customer_id}/download?stage={stage}"
 
-
 VERIFY = configs.getboolean("SSL", "verify")
 
 if VERIFY:
@@ -176,6 +181,7 @@ def retry(func: Callable) -> Callable:
         resp: r.Response = func(*args, **kwargs)
         if resp.status_code == 401:
             reset_request_methods()
+            sleep(1)
             resp = func(*args, **kwargs)
             if resp.status_code == 401:
                 raise Exception("Unable to authenticate")
@@ -226,16 +232,13 @@ def get_coils(for_customer: ADPCustomer, version: int = 1) -> Coils:
                 BACKEND_URL + f"/v2/vendors/{VENDOR}/vendor-customers/{for_customer.id}"
             )
             includes = [
-                "vendor-customer-pricing-classes.vendor-pricing-classes"
-                ".vendor-pricing-by-class.vendor-products.vendor-product-attrs",
                 "vendor-pricing-by-customer.vendor-products.vendor-product-attrs",
+                "vendor-pricing-by-customer.vendor-products.vendor-product-to-class-mapping.vendor-product-classes",
             ]
             include = "include=" + ",".join(incl for incl in includes)
             filters = {
-                "filter_vendor_pricing_classes__name": [
-                    ADPPricingClasses.ZERO_DISCOUNT,
-                    ADPPricingClasses.STRATEGY_PRICING,
-                ]
+                "filter_vendor_product_classes__name": ["Coils"],
+                "filter_vendor_product_classes__rank": [1],
             }
             filters_formatted = "&".join(
                 f"{k}={','.join(i for i in v)}" for k, v in filters.items()
@@ -248,14 +251,16 @@ def get_coils(for_customer: ADPCustomer, version: int = 1) -> Coils:
             if not data.get("data"):
                 raise Exception("No Coils")
 
-            includes_pricing_classes = restructure_included(
-                data["included"], "vendor-customer-pricing-classes"
-            )
             includes_pricing_by_customer = restructure_included(
                 data["included"], "vendor-pricing-by-customer"
             )
-            result = restructure_pricing_by_class(includes_pricing_classes)
-            result |= restructure_pricing_by_customer(includes_pricing_by_customer)
+            pricing = restructure_pricing_by_customer(includes_pricing_by_customer)
+            result = CoilsV2(
+                data=[
+                    CoilV2(id=id_, attributes=CoilAttrsV2(**attrs))
+                    for id_, attrs in pricing.items()
+                ]
+            )
             return result
 
 
