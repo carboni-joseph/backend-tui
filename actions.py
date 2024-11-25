@@ -23,6 +23,9 @@ from models import (
     AHAttrs,
     AH,
     AHs,
+    AHAttrsV2,
+    AHV2,
+    AHsV2,
     Stage,
     Rating,
     Ratings,
@@ -42,6 +45,14 @@ configs.read("config.ini")
 class ADPPricingClasses(StrEnum):
     ZERO_DISCOUNT = "ZERO_DISCOUNT"
     STRATEGY_PRICING = "STRATEGY_PRICING"
+
+
+class ADPProductClasses(StrEnum):
+    COILS = "Coils"
+    AIR_HANDLERS = "Air Handlers"
+
+
+LOCAL_STORAGE = {ADPProductClasses.COILS: {}, ADPProductClasses.AIR_HANDLERS: {}}
 
 
 def restructure_included(included: list[dict], primary: str, ids: list[int] = None):
@@ -206,6 +217,35 @@ class UploadError(Exception):
     """Exception for an error in uploading a file"""
 
 
+def get_product_from_api(
+    product_type: ADPProductClasses, customer: ADPCustomer
+) -> dict:
+    product_url = BACKEND_URL + f"/v2/vendors/{VENDOR}/vendor-customers/{customer.id}"
+    includes = [
+        "vendor-pricing-by-customer.vendor-products.vendor-product-attrs",
+        "vendor-pricing-by-customer.vendor-products.vendor-product-to-class-mapping.vendor-product-classes",
+    ]
+    include = "include=" + ",".join(incl for incl in includes)
+    filters = {
+        "filter_vendor_product_classes__name": [product_type.value],
+        "filter_vendor_product_classes__rank": [1],
+    }
+    filters_formatted = "&".join(
+        f"{k}={','.join(str(i) for i in v)}" for k, v in filters.items()
+    )
+    query_params = "&".join(j for j in (include, filters_formatted))
+    resp: r.Response = r_get(f"{product_url}?{query_params}")
+    data: dict = resp.json()
+    if not data.get("data"):
+        raise Exception("No Coils")
+
+    includes_pricing_by_customer = restructure_included(
+        data["included"], "vendor-pricing-by-customer"
+    )
+    pricing = restructure_pricing_by_customer(includes_pricing_by_customer)
+    return pricing
+
+
 def get_coils(for_customer: ADPCustomer, version: int = 1) -> Coils:
     match version:
         case 1:
@@ -227,34 +267,15 @@ def get_coils(for_customer: ADPCustomer, version: int = 1) -> Coils:
                 )
             )
             return Coils(data=customer_coils)
-        case 2:
-            product_url = (
-                BACKEND_URL + f"/v2/vendors/{VENDOR}/vendor-customers/{for_customer.id}"
-            )
-            includes = [
-                "vendor-pricing-by-customer.vendor-products.vendor-product-attrs",
-                "vendor-pricing-by-customer.vendor-products.vendor-product-to-class-mapping.vendor-product-classes",
-            ]
-            include = "include=" + ",".join(incl for incl in includes)
-            filters = {
-                "filter_vendor_product_classes__name": ["Coils"],
-                "filter_vendor_product_classes__rank": [1],
-            }
-            filters_formatted = "&".join(
-                f"{k}={','.join(str(i) for i in v)}" for k, v in filters.items()
-            )
-            query_params = "&".join(j for j in (include, filters_formatted))
-            resp: r.Response = r_get(f"{product_url}?{query_params}")
-            data: dict = resp.json()
-            with open("resp.json", "w") as fh:
-                json.dump(data, fh, indent=2)
-            if not data.get("data"):
-                raise Exception("No Coils")
 
-            includes_pricing_by_customer = restructure_included(
-                data["included"], "vendor-pricing-by-customer"
-            )
-            pricing = restructure_pricing_by_customer(includes_pricing_by_customer)
+        case 2:
+            customer_id = for_customer.id
+            if stored_coils := LOCAL_STORAGE[ADPProductClasses.COILS].get(customer_id):
+                pricing = stored_coils
+            else:
+                pricing = get_product_from_api(ADPProductClasses.COILS, for_customer)
+                LOCAL_STORAGE[ADPProductClasses.COILS][customer_id] = pricing
+
             result = CoilsV2(
                 data=[
                     CoilV2(id=id_, attributes=CoilAttrsV2(**attrs))
@@ -284,9 +305,27 @@ def get_air_handlers(for_customer: ADPCustomer, version: int = 1) -> AHs:
                     ah.attributes.width,
                 )
             )
+            return AHs(data=customer_ahs)
+
         case 2:
-            pass
-    return AHs(data=customer_ahs)
+            customer_id = for_customer.id
+            if stored_ahs := LOCAL_STORAGE[ADPProductClasses.AIR_HANDLERS].get(
+                customer_id
+            ):
+                pricing = stored_ahs
+            else:
+                pricing = get_product_from_api(
+                    ADPProductClasses.AIR_HANDLERS, for_customer
+                )
+                LOCAL_STORAGE[ADPProductClasses.AIR_HANDLERS][customer_id] = pricing
+
+            result = AHsV2(
+                data=[
+                    AHV2(id=id_, attributes=AHAttrsV2(**attrs))
+                    for id_, attrs in pricing.items()
+                ]
+            )
+            return result
 
 
 def get_ratings(for_customer: ADPCustomer, version: int = 1) -> Ratings:

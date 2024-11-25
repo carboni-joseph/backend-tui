@@ -167,13 +167,47 @@ class AHAttrs(BaseModel):
     stage: str
 
 
+class AHAttrsV2(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, protected_namespaces={})
+    category: str
+    model_number: str = Field(alias="model-number")
+    mpg: str
+    series: str
+    tonnage: int
+    pallet_qty: Optional[int] = Field(default=None, alias="pallet-qty")
+    min_qty: Optional[int] = Field(default=None, alias="min-qty")
+    width: float
+    depth: float
+    height: float
+    weight: int
+    metering: str
+    motor: str
+    heat: str
+    price: int
+    effective_date: datetime = Field(default=None, alias="effective-date")
+
+    def model_post_init(self, __context):
+        self.price = int(self.price / 100)
+        self.effective_date: str = str(self.effective_date)
+        return super().model_post_init(__context)
+
+
 class AH(BaseModel):
     id: int
     attributes: AHAttrs
 
 
+class AHV2(BaseModel):
+    id: int
+    attributes: AHAttrsV2
+
+
 class AHs(BaseModel):
     data: list[AH]
+
+
+class AHsV2(BaseModel):
+    data: list[AHV2]
 
 
 class RatingAttrs(BaseModel):
