@@ -241,7 +241,7 @@ def get_coils(for_customer: ADPCustomer, version: int = 1) -> Coils:
                 "filter_vendor_product_classes__rank": [1],
             }
             filters_formatted = "&".join(
-                f"{k}={','.join(i for i in v)}" for k, v in filters.items()
+                f"{k}={','.join(str(i) for i in v)}" for k, v in filters.items()
             )
             query_params = "&".join(j for j in (include, filters_formatted))
             resp: r.Response = r_get(f"{product_url}?{query_params}")
