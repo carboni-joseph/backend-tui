@@ -189,11 +189,12 @@ if VERIFY:
 def retry(func: Callable) -> Callable:
     @wraps(func)
     def inner(*args, **kwargs):
-        resp: r.Response = func(*args, **kwargs)
+        auth_header = AuthToken.header
+        resp: r.Response = func(*args, headers=auth_header, **kwargs)
         if resp.status_code == 401:
             reset_request_methods()
-            sleep(1)
-            resp = func(*args, **kwargs)
+            auth_header = AuthToken.header
+            resp = func(*args, headers=auth_header, **kwargs)
             if resp.status_code == 401:
                 raise Exception("Unable to authenticate")
         return resp
@@ -201,10 +202,10 @@ def retry(func: Callable) -> Callable:
     return inner
 
 
-r_get = partial(retry(r.get), headers=AuthToken.header, verify=VERIFY)
-r_post = partial(retry(r.post), headers=AuthToken.header, verify=VERIFY)
-r_patch = partial(retry(r.patch), headers=AuthToken.header, verify=VERIFY)
-r_delete = partial(retry(r.delete), headers=AuthToken.header, verify=VERIFY)
+r_get = partial(retry(r.get), verify=VERIFY)
+r_post = partial(retry(r.post), verify=VERIFY)
+r_patch = partial(retry(r.patch), verify=VERIFY)
+r_delete = partial(retry(r.delete), verify=VERIFY)
 
 
 class FileSaveError(Exception):
@@ -246,7 +247,7 @@ def get_product_from_api(
     return pricing
 
 
-def get_coils(for_customer: ADPCustomer, version: int = 1) -> Coils:
+def get_coils(for_customer: ADPCustomer, version: int = 1) -> Coils | CoilsV2:
     match version:
         case 1:
             url = ADP_CUSTOMERS + f"/{for_customer.id}/adp-coil-programs"
@@ -285,7 +286,7 @@ def get_coils(for_customer: ADPCustomer, version: int = 1) -> Coils:
             return result
 
 
-def get_air_handlers(for_customer: ADPCustomer, version: int = 1) -> AHs:
+def get_air_handlers(for_customer: ADPCustomer, version: int = 1) -> AHs | AHsV2:
     match version:
         case 1:
             url = ADP_CUSTOMERS + f"/{for_customer.id}/adp-ah-programs"
