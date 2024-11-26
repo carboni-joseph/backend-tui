@@ -224,7 +224,8 @@ def get_product_from_api(
     product_url = BACKEND_URL + f"/v2/vendors/{VENDOR}/vendor-customers/{customer.id}"
     includes = [
         "vendor-pricing-by-customer.vendor-products.vendor-product-attrs",
-        "vendor-pricing-by-customer.vendor-products.vendor-product-to-class-mapping.vendor-product-classes",
+        "vendor-pricing-by-customer.vendor-products.vendor-product-to-class-mapping"
+        ".vendor-product-classes",
     ]
     include = "include=" + ",".join(incl for incl in includes)
     filters = {
@@ -238,7 +239,7 @@ def get_product_from_api(
     resp: r.Response = r_get(f"{product_url}?{query_params}")
     data: dict = resp.json()
     if not data.get("data"):
-        raise Exception("No Coils")
+        raise Exception(f"No {product_type}")
 
     includes_pricing_by_customer = restructure_included(
         data["included"], "vendor-pricing-by-customer"
