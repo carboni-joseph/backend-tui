@@ -1,7 +1,5 @@
 import re
 import os
-import json
-from time import sleep
 from pathlib import Path
 from typing import Callable
 from collections import defaultdict
@@ -40,6 +38,15 @@ VENDOR = "adp"
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 configs = configparser.ConfigParser()
 configs.read("config.ini")
+
+
+def reset_request_methods() -> None:
+    AuthToken.get_new_token()
+    global r_get, r_post, r_patch, r_delete
+    r_get = partial(retry(r.get), headers=AuthToken.header, verify=VERIFY)
+    r_post = partial(retry(r.post), headers=AuthToken.header, verify=VERIFY)
+    r_patch = partial(retry(r.patch), headers=AuthToken.header, verify=VERIFY)
+    r_delete = partial(retry(r.delete), headers=AuthToken.header, verify=VERIFY)
 
 
 class ADPPricingClasses(StrEnum):
@@ -285,6 +292,8 @@ def get_coils(for_customer: ADPCustomer, version: int = 1) -> Coils | CoilsV2:
                 ]
             )
             return result
+        case _:
+            raise Exception(f"Incompatible version used: {version}")
 
 
 def get_air_handlers(for_customer: ADPCustomer, version: int = 1) -> AHs | AHsV2:
@@ -328,11 +337,13 @@ def get_air_handlers(for_customer: ADPCustomer, version: int = 1) -> AHs | AHsV2
                 ]
             )
             return result
+        case _:
+            raise Exception(f"Incompatible version used: {version}")
 
 
 def get_ratings(for_customer: ADPCustomer, version: int = 1) -> Ratings:
     match version:
-        case 1:
+        case 1 | 2:
             url = ADP_CUSTOMERS + f"/{for_customer.id}/adp-program-ratings"
             resp: r.Response = r_get(url)
             data: dict = resp.json()
@@ -356,8 +367,8 @@ def get_ratings(for_customer: ADPCustomer, version: int = 1) -> Ratings:
                     rating.attributes.indoor_model,
                 )
             )
-        case 2:
-            pass
+        case _:
+            raise Exception(f"Incompatible version used: {version}")
     return Ratings(data=customer_ratings)
 
 
@@ -448,16 +459,10 @@ def get_sca_customers_w_adp_accounts(version: int = 1) -> list[SCACustomer]:
                 result.append(
                     SCACustomer(sca_name=sca_name, adp_objs=adp_customers_selected)
                 )
+        case _:
+            raise Exception(f"Incompatible version number used: {version}")
+
     return result
-
-
-def reset_request_methods() -> None:
-    AuthToken.get_new_token()
-    global r_get, r_post, r_patch, r_delete
-    r_get = partial(retry(r.get), headers=AuthToken.header, verify=VERIFY)
-    r_post = partial(retry(r.post), headers=AuthToken.header, verify=VERIFY)
-    r_patch = partial(retry(r.patch), headers=AuthToken.header, verify=VERIFY)
-    r_delete = partial(retry(r.delete), headers=AuthToken.header, verify=VERIFY)
 
 
 def request_dl_link(customer_id: int, stage: Stage) -> str:
