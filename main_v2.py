@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable, Hashable, MutableSequence
 
 from auth import set_up_token
-from models import ADPCustomer, Coil, Stage, AH, Rating
+from models import ADPCustomer, Coil, Stage, AH, Rating, CoilsV2, CoilV2, AHV2, AHsV2
 
 set_up_token()
 
@@ -215,24 +215,38 @@ class ADPManagement:
             palette=[("reversed", "standout", "")],
             unhandled_input=self.app.custom_switches,
         ).run()
+        return
 
     def soft_del_customer(self, adp_customer: ADPCustomer, **kwargs):
+        """Proof of concept for soft delete in the app using back_one"""
         self.app.back_one(remove_content=adp_customer)
         return [urwid.Text(f"removed {adp_customer.adp_alias}")]
 
-    def update_coil_status(self, products: Coil, new_stage: Stage, **kwargs):
+    def update_product(self, products: Coil, new_stage: Stage, **kwargs):
+        """The concept of 'status' for pricing has been left out of the update
+        to v2. Price changes and effective dates are captured in a changelog. The status
+        can be derived by sales records from time to time. The only updates
+        needed or allowed in this use case are the price points and effective dates.
+
+        In addition, coils and air handlers have been unified, so they can now share
+        the same method for updates.
+
+        Updates may include deletion."""
         pass
 
     def update_ah_status(self, products: AH, new_stage: Stage, **kwargs):
         pass
 
     def gen_coil_menus(self, adp_customer: ADPCustomer, **kwargs) -> Footer:
-        coils = get_coils(for_customer=adp_customer, version=2)
+        coils: CoilsV2 = get_coils(for_customer=adp_customer, version=2)
+        coil_product_actions = []
         coil_menu_options = [
             MenuOption(
-                coil.attributes.model_number,
+                f"{coil.attributes.model_number} : ${coil.attributes.price:.02f} "
+                f"effective {coil.attributes.effective_date}",
                 coil,
-                Action(coil.attributes.model_number, self.update_coil_status),
+                # Action(coil.attributes.model_number, self.update_product),
+                Menu("Update", [MenuOption("Price", coil)]),
             )
             for coil in coils.data
         ]
@@ -241,7 +255,7 @@ class ADPManagement:
         return [urwid.Text("coils menu")]
 
     def gen_ah_menus(self, adp_customer: ADPCustomer, **kwargs) -> Footer:
-        ahs = get_air_handlers(for_customer=adp_customer, version=2)
+        ahs: AHsV2 = get_air_handlers(for_customer=adp_customer, version=2)
         ah_menu_options = [
             MenuOption(
                 ah.attributes.model_number,
