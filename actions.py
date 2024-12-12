@@ -1,3 +1,4 @@
+from pprint import pprint
 import re
 import os
 from pathlib import Path
@@ -43,10 +44,10 @@ configs.read("config.ini")
 def reset_request_methods() -> None:
     AuthToken.get_new_token()
     global r_get, r_post, r_patch, r_delete
-    r_get = partial(retry(r.get), headers=AuthToken.header, verify=VERIFY)
-    r_post = partial(retry(r.post), headers=AuthToken.header, verify=VERIFY)
-    r_patch = partial(retry(r.patch), headers=AuthToken.header, verify=VERIFY)
-    r_delete = partial(retry(r.delete), headers=AuthToken.header, verify=VERIFY)
+    r_get = partial(retry(r.get), verify=VERIFY)
+    r_post = partial(retry(r.post), verify=VERIFY)
+    r_patch = partial(retry(r.patch), verify=VERIFY)
+    r_delete = partial(retry(r.delete), verify=VERIFY)
 
 
 class ADPPricingClasses(StrEnum):
@@ -512,7 +513,8 @@ def patch_new_coil_status(
 
 
 def price_check(customer_id: int, model: str, *args, **kwargs) -> r.Response:
-    query = f"?model_num={model}&customer_id={customer_id}"
+    year = kwargs.get("BASE_YEAR", 2025)
+    query = f"?model_num={model}&customer_id={customer_id}&price_year={year}"
     return r_get(url=MODEL_LOOKUP + query)
 
 
