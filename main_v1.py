@@ -1,8 +1,8 @@
-__version__ = 1
+# __version__ = 1
 import urwid
 from functools import partial
 from typing import Literal, Callable
-from requests import Response
+from requests import Response, get
 from auth import set_up_token
 
 set_up_token()
@@ -44,6 +44,14 @@ CONFIGS = ConfigParser()
 CONFIGS.read(str(FILE_DIR / "config.ini"))
 BACKEND_URL = CONFIGS["ENDPOINTS"]["backend_url"]
 BASE_YEAR = CONFIGS["OTHER"]["price_year"]
+V2_AVAILABILITY_ENDPOINT = BACKEND_URL + "/v2"
+
+resp = get(V2_AVAILABILITY_ENDPOINT)
+match resp.status_code:
+    case 200:
+        __version__ = 2
+    case _:
+        __version__ = 1
 
 
 def customer_chosen(frame: urwid.Frame, choice: SCACustomer, button) -> None:
@@ -536,7 +544,7 @@ palette = [
     ("norm_red", "dark red", ""),
     ("norm_green", "dark green", ""),
 ]
-adp_customers = get_sca_customers_w_adp_accounts()
+adp_customers = get_sca_customers_w_adp_accounts(version=__version__)
 adp_customers.sort(key=lambda x: x.sca_name)
 
 main = urwid.Padding(welcome_screen(top_menu), left=2, right=2)
