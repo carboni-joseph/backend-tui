@@ -261,7 +261,10 @@ def submit_model(
     user_text: str = user_input.edit_text
     model_list: list = [model.strip().upper() for model in user_text.split(",")]
     results = list()
-    for model in model_list:
+    total_items = len(model_list)
+    for i, model in enumerate(model_list):
+        current_msg = urwid.Text(f"Working on {model}  ({i+1} of {total_items})")
+        frame.header = urwid.Pile([current_msg, frame.header])
         resp: Response = product_type_method(customer.id, model)
         body = resp.json()
         if resp.status_code == 200:
