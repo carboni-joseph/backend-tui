@@ -1,6 +1,8 @@
 import json
 import re
 import os
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 from collections import defaultdict
@@ -58,6 +60,20 @@ class ADPPricingClasses(StrEnum):
 class ADPProductClasses(StrEnum):
     COILS = "Coils"
     AIR_HANDLERS = "Air Handlers"
+
+
+@dataclass
+class NewProductDetails:
+    id: int
+    zero_discount_price: int
+    material_group_discount: float
+    material_group_net_price: int
+    snp_discount: float
+    snp_price: int
+    net_price: int
+    model_returned: str
+    category: str
+    model_lookup_obj: dict
 
 
 LOCAL_STORAGE = {ADPProductClasses.COILS: {}, ADPProductClasses.AIR_HANDLERS: {}}
@@ -542,6 +558,122 @@ def post_new_ah(customer_id: int, model: str) -> r.Response:
     return custom_response(data=data)
 
 
+def new_product_setup(
+    customer_id: int, model: str, class_1: ADPProductClasses
+) -> NewProductDetails:
+
+    # look up model
+    model_lookup_query = f"?model_num={model}&customer_id={customer_id}"
+    model_lookup_resp: r.Response = r_get(url=MODEL_LOOKUP + model_lookup_query)
+    model_lookup_content: dict = model_lookup_resp.json()
+    material_group = model_lookup_content.pop("mpg")
+
+    # for now, just popping to remove them from the object
+    model_returned = model_lookup_content.pop("model-number")
+    zero_discount_price = model_lookup_content.pop("zero-discount-price")
+    material_group_discount = model_lookup_content.pop("material-group-discount", None)
+    material_group_net_price = model_lookup_content.pop(
+        "material-group-net-price", None
+    )
+    snp_discount = model_lookup_content.pop("snp-discount", None)
+    snp_net_price = model_lookup_content.pop("snp-net-price", None)
+    net_price = int(model_lookup_content.pop("net-price"))
+    default_description = model_lookup_content.pop("category")
+
+    # register model, get id
+    new_product_route = "/v2/vendors/vendor-products"
+    pl = {
+        "type": "vendor-products",
+        "attributes": {
+            "vendor-product-identifier": model,
+            "vendor-product-description": default_description,
+        },
+        "relationships": {
+            "vendors": {"data": {"type": "vendors", "id": "adp"}},
+        },
+    }
+    new_product_resp: r.Response = r_post(
+        url=BACKEND_URL + new_product_route, json=dict(data=pl)
+    )
+    new_product_data = new_product_resp.json()["data"]
+    new_product_id = int(new_product_data["id"])
+
+    # associate stable product attributes to product
+    payloads = []
+    for attr, value in model_lookup_content.items():
+        attr: str
+        try:
+            int(value)
+        except:
+            val_type = "STRING"
+        else:
+            val_type = "NUMBER"
+
+        pl = {
+            "type": "vendor-product-attrs",
+            "attributes": {
+                "attr": attr.replace("-", "_"),
+                "type": val_type,
+                "value": str(value),
+            },
+            "relationships": {
+                "vendor-products": {
+                    "data": {"type": "vendor-products", "id": new_product_id}
+                },
+                "vendors": {"data": {"type": "vendors", "id": "adp"}},
+            },
+        }
+        payloads.append(pl)
+
+    new_product_attr_route = "/v2/vendors/vendor-product-attrs"
+    for payload in payloads:
+        r_post(url=BACKEND_URL + new_product_attr_route, json=dict(data=payload))
+    # map model to its product classes
+    for cl in [material_group, class_1.value]:
+        product_class_query = (
+            f"/v2/vendors/{VENDOR}/vendor-product-classes?filter_name={cl}"
+        )
+        product_class_resp: r.Response = r_get(url=BACKEND_URL + product_class_query)
+        product_class_resp_data = product_class_resp.json()["data"]
+        if isinstance(product_class_resp_data, list):
+            data_list = [
+                e for e in product_class_resp_data if e["attributes"]["name"] == cl
+            ]
+            product_class_id = data_list.pop()["id"]
+        else:
+            product_class_id = product_class_resp_data["id"]
+        mapping_ep = "/v2/vendors/vendor-product-to-class-mapping"
+        pl = {
+            "type": "vendor-product-to-class-mapping",
+            "attributes": None,
+            "relationships": {
+                "vendor-products": {
+                    "data": {"type": "vendor-products", "id": new_product_id}
+                },
+                "vendor-product-classes": {
+                    "data": {
+                        "type": "vendor-product-classes",
+                        "id": product_class_id,
+                    }
+                },
+                "vendors": {"data": {"type": "vendors", "id": "adp"}},
+            },
+        }
+        r_post(BACKEND_URL + mapping_ep, json=dict(data=pl))
+        return NewProductDetails(
+            id=new_product_id,
+            zero_discount_price=zero_discount_price,
+            material_group_discount=material_group_discount,
+            material_group_net_price=material_group_net_price,
+            snp_discount=snp_discount,
+            snp_price=snp_net_price,
+            net_price=net_price,
+            model_returned=model_returned,
+            category=default_description,
+            model_lookup_obj=model_lookup_content,
+        )
+
+
 def post_new_product(customer_id: int, model: str, class_1: ADPProductClasses) -> dict:
     """
     STEPS
@@ -559,106 +691,17 @@ def post_new_product(customer_id: int, model: str, class_1: ADPProductClasses) -
 
     product_check_resp: r.Response = r_get(url=BACKEND_URL + product_resource)
     if product_check_resp.status_code == 204:
-        # look up model
-        model_lookup_query = f"?model_num={model}&customer_id={customer_id}"
-        model_lookup_resp: r.Response = r_get(url=MODEL_LOOKUP + model_lookup_query)
-        model_lookup_content: dict = model_lookup_resp.json()
-        material_group = model_lookup_content.pop("mpg")
-
-        # for now, just popping to remove them from the object
-        model_returned = model_lookup_content.pop("model-number")
-        zero_discount_price = model_lookup_content.pop("zero-discount-price")
-        material_group_discount = model_lookup_content.pop(
-            "material-group-discount", None
-        )
-        material_group_net_price = model_lookup_content.pop(
-            "material-group-net-price", None
-        )
-        snp_discount = model_lookup_content.pop("snp-discount", None)
-        snp_net_price = model_lookup_content.pop("snp-net-price", None)
-        net_price = int(model_lookup_content.pop("net-price"))
-        default_description = model_lookup_content.pop("category")
-
-        # register model, get id
-        new_product_route = "/v2/vendors/vendor-products"
-        pl = {
-            "type": "vendor-products",
-            "attributes": {
-                "vendor-product-identifier": model,
-                "vendor-product-description": default_description,
-            },
-            "relationships": {
-                "vendors": {"data": {"type": "vendors", "id": "adp"}},
-            },
-        }
-        new_product_resp: r.Response = r_post(
-            url=BACKEND_URL + new_product_route, json=dict(data=pl)
-        )
-        new_product_data = new_product_resp.json()["data"]
-        new_product_id = int(new_product_data["id"])
-
-        # associate stable product attributes to product
-        payloads = []
-        for attr, value in model_lookup_content.items():
-            attr: str
-            try:
-                int(value)
-            except:
-                val_type = "STRING"
-            else:
-                val_type = "NUMBER"
-
-            pl = {
-                "type": "vendor-product-attrs",
-                "attributes": {
-                    "attr": attr.replace("-", "_"),
-                    "type": val_type,
-                    "value": str(value),
-                },
-                "relationships": {
-                    "vendor-products": {
-                        "data": {"type": "vendor-products", "id": new_product_id}
-                    },
-                    "vendors": {"data": {"type": "vendors", "id": "adp"}},
-                },
-            }
-            payloads.append(pl)
-
-        new_product_attr_route = "/v2/vendors/vendor-product-attrs"
-        for payload in payloads:
-            resp = r_post(
-                url=BACKEND_URL + new_product_attr_route, json=dict(data=payload)
-            )
-        # map model to its product class
-        for cl, rank in [(material_group, 2), (class_1.value, 1)]:
-            product_class_query = f"/v2/vendors/{VENDOR}/vendor-product-classes?filter_name={cl}&filter_rank={rank}"
-            product_class_resp: r.Response = r_get(
-                url=BACKEND_URL + product_class_query
-            )
-            product_class_resp_data = product_class_resp.json()["data"]
-            # there should be only 1 object
-            if isinstance(product_class_resp_data, list):
-                product_class_id = product_class_resp_data.pop()["id"]
-            else:
-                product_class_id = product_class_resp_data["id"]
-            mapping_ep = "/v2/vendors/vendor-product-to-class-mapping"
-            pl = {
-                "type": "vendor-product-to-class-mapping",
-                "attributes": None,
-                "relationships": {
-                    "vendor-products": {
-                        "data": {"type": "vendor-products", "id": new_product_id}
-                    },
-                    "vendor-product-classes": {
-                        "data": {
-                            "type": "vendor-product-classes",
-                            "id": product_class_id,
-                        }
-                    },
-                    "vendors": {"data": {"type": "vendors", "id": "adp"}},
-                },
-            }
-            resp = r_post(BACKEND_URL + mapping_ep, json=dict(data=pl))
+        new_product_details = new_product_setup(customer_id, model, class_1)
+        new_product_id = new_product_details.id
+        zero_discount_price = new_product_details.zero_discount_price
+        material_group_discount = new_product_details.material_group_discount
+        material_group_net_price = new_product_details.material_group_net_price
+        snp_discount = new_product_details.snp_discount
+        snp_net_price = new_product_details.snp_price
+        net_price = new_product_details.net_price
+        model_returned = new_product_details.model_returned
+        default_description = new_product_details.category
+        model_lookup_content = new_product_details.model_lookup_obj
 
         # map product to customer with price
         customer_pricing_ep = "/v2/vendors/vendor-pricing-by-customer"
@@ -666,7 +709,8 @@ def post_new_product(customer_id: int, model: str, class_1: ADPProductClasses) -
             "type": "vendor-pricing-by-customer",
             "attributes": {
                 "use-as-override": True,
-                "price": net_price,
+                "price": net_price * 100,
+                "effective-date": str(datetime.now()),
             },
             "relationships": {
                 "vendor-products": {
@@ -737,7 +781,8 @@ def post_new_product(customer_id: int, model: str, class_1: ADPProductClasses) -
             "type": "vendor-pricing-by-customer",
             "attributes": {
                 "use-as-override": True,
-                "price": net_price,
+                "price": net_price * 100,
+                "effective-date": str(datetime.now()),
             },
             "relationships": {
                 "vendor-products": {
