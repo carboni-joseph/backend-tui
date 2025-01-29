@@ -74,6 +74,7 @@ class NewProductDetails:
     model_returned: str
     category: str
     model_lookup_obj: dict
+    material_group: str
 
 
 LOCAL_STORAGE = {ADPProductClasses.COILS: {}, ADPProductClasses.AIR_HANDLERS: {}}
@@ -671,6 +672,7 @@ def new_product_setup(
             model_returned=model_returned,
             category=default_description,
             model_lookup_obj=model_lookup_content,
+            material_group=material_group,
         )
 
 
@@ -702,6 +704,7 @@ def post_new_product(customer_id: int, model: str, class_1: ADPProductClasses) -
         model_returned = new_product_details.model_returned
         default_description = new_product_details.category
         model_lookup_content = new_product_details.model_lookup_obj
+        material_group = new_product_details.material_group
 
         # map product to customer with price
         customer_pricing_ep = "/v2/vendors/vendor-pricing-by-customer"
