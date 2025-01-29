@@ -629,6 +629,7 @@ def new_product_setup(
     new_product_attr_route = "/v2/vendors/vendor-product-attrs"
     for payload in payloads:
         r_post(url=BACKEND_URL + new_product_attr_route, json=dict(data=payload))
+
     # map model to its product classes
     for cl in [material_group, class_1.value]:
         product_class_query = (
@@ -661,19 +662,20 @@ def new_product_setup(
             },
         }
         r_post(BACKEND_URL + mapping_ep, json=dict(data=pl))
-        return NewProductDetails(
-            id=new_product_id,
-            zero_discount_price=zero_discount_price,
-            material_group_discount=material_group_discount,
-            material_group_net_price=material_group_net_price,
-            snp_discount=snp_discount,
-            snp_price=snp_net_price,
-            net_price=net_price,
-            model_returned=model_returned,
-            category=default_description,
-            model_lookup_obj=model_lookup_content,
-            material_group=material_group,
-        )
+
+    return NewProductDetails(
+        id=new_product_id,
+        zero_discount_price=zero_discount_price,
+        material_group_discount=material_group_discount,
+        material_group_net_price=material_group_net_price,
+        snp_discount=snp_discount,
+        snp_price=snp_net_price,
+        net_price=net_price,
+        model_returned=model_returned,
+        category=default_description,
+        model_lookup_obj=model_lookup_content,
+        material_group=material_group,
+    )
 
 
 def post_new_product(customer_id: int, model: str, class_1: ADPProductClasses) -> dict:
