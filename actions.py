@@ -768,7 +768,12 @@ def post_new_product(customer_id: int, model: str, class_1: ADPProductClasses) -
     else:
         existing_product_data = product_check_resp.json()["data"]
         if isinstance(existing_product_data, list):
-            existing_product_id = existing_product_data.pop()["id"]
+            filtered = [
+                e
+                for e in existing_product_data
+                if e["attributes"]["vendor-product-identifier"] == model
+            ]
+            existing_product_id = filtered.pop()["id"]
         else:
             existing_product_id = existing_product_data["id"]
 
