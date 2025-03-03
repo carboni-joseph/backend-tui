@@ -18,6 +18,32 @@ class SCACustomer:
     adp_objs: list[ADPCustomer]
 
 
+@dataclass
+class Vendor:
+    id: str
+    name: str
+
+
+@dataclass
+class VendorCustomer:
+    id: int
+    vendor: Vendor
+    name: str
+
+
+@dataclass
+class VendorCustomers:
+    entites: list[VendorCustomer]
+
+
+@dataclass
+class SCACustomerV2:
+    sca_id: int
+    sca_name: str
+    vendor: Vendor
+    entity_accounts: list[VendorCustomer]
+
+
 class Stage(StrEnum):
     PROPOSED = auto()
     ACTIVE = auto()
@@ -25,13 +51,7 @@ class Stage(StrEnum):
     REMOVED = auto()
 
 
-@dataclass
-class ProgramTypeSelection:
-    label: str
-    type_selected: Stage
-
-
-class Actions(StrEnum):
+class ADPActions(StrEnum):
     DOWNLOAD_PROGRAM = "Download Program"
     UPLOAD_RATINGS = "Upload Ratings"
     # REVIEW_RATINGS = "Review Ratings"

@@ -13,17 +13,10 @@ from functools import partial, wraps
 from tkinter import Tk, filedialog
 from models import (
     ADPCustomer,
-    Coils,
-    SCACustomer,
-    CoilAttrs,
+    SCACustomerV2,
     CoilAttrsV2,
-    Coil,
-    Coils,
     CoilV2,
     CoilsV2,
-    AHAttrs,
-    AH,
-    AHs,
     AHAttrsV2,
     AHV2,
     AHsV2,
@@ -32,11 +25,10 @@ from models import (
     Ratings,
     RatingAttrs,
     RatingRels,
+    Vendor,
+    VendorCustomer,
 )
 from auth import AuthToken
-
-# VENDOR = "TEST_VENDOR"
-VENDOR = "adp"
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 configs = configparser.ConfigParser()
@@ -197,15 +189,11 @@ def get_save_dir() -> Path:
 BACKEND_URL = configs["ENDPOINTS"]["backend_url"]
 
 ADP_RESOURCE = BACKEND_URL + "/vendors/adp"
-AHS = ADP_RESOURCE + "/adp-ah-programs"
-COILS = ADP_RESOURCE + "/adp-coil-programs"
 RATINGS = ADP_RESOURCE + "/adp-program-ratings"
-ADP_CUSTOMERS = ADP_RESOURCE + "/adp-customers"
 MODEL_LOOKUP = ADP_RESOURCE + "/model-lookup"
 ADP_FILE_DOWNLOAD_LINK = ADP_RESOURCE + "/programs/{customer_id}/download?stage={stage}"
 
 # V2
-V2 = "/v2/vendors/adp"
 
 VERIFY = configs.getboolean("SSL", "verify")
 
@@ -247,9 +235,11 @@ class UploadError(Exception):
 
 
 def get_product_from_api(
-    product_type: ADPProductClasses, customer: ADPCustomer
+    product_type: ADPProductClasses, customer: VendorCustomer
 ) -> dict:
-    product_url = BACKEND_URL + f"/v2/vendors/{VENDOR}/vendor-customers/{customer.id}"
+    product_url = (
+        BACKEND_URL + f"/v2/vendors/{customer.vendor.id}/vendor-customers/{customer.id}"
+    )
     includes = [
         "vendor-pricing-by-customer.vendor-products.vendor-product-attrs",
         "vendor-pricing-by-customer.vendor-products.vendor-product-to-class-mapping"
@@ -276,213 +266,133 @@ def get_product_from_api(
     return pricing
 
 
-def get_coils(for_customer: ADPCustomer, version: int = 1) -> Coils | CoilsV2:
-    match version:
-        case 1:
-            url = ADP_CUSTOMERS + f"/{for_customer.id}/adp-coil-programs"
-            resp: r.Response = r_get(url)
-            data: dict = resp.json()
-            if not data.get("data"):
-                raise Exception("No Coils")
-            customer_coils = [
-                Coil(id=record["id"], attributes=CoilAttrs(**record["attributes"]))
-                for record in data["data"]
-            ]
-            customer_coils.sort(
-                key=lambda coil: (
-                    coil.attributes.stage,
-                    coil.attributes.category,
-                    coil.attributes.tonnage,
-                    coil.attributes.width,
-                )
-            )
-            return Coils(data=customer_coils)
+def get_coils(for_customer: VendorCustomer) -> CoilsV2:
+    customer_id = for_customer.id
+    if stored_coils := LOCAL_STORAGE[ADPProductClasses.COILS].get(customer_id):
+        pricing = stored_coils
+    else:
+        pricing = get_product_from_api(ADPProductClasses.COILS, for_customer)
+        LOCAL_STORAGE[ADPProductClasses.COILS][customer_id] = pricing
 
-        case 2:
-            customer_id = for_customer.id
-            if stored_coils := LOCAL_STORAGE[ADPProductClasses.COILS].get(customer_id):
-                pricing = stored_coils
-            else:
-                pricing = get_product_from_api(ADPProductClasses.COILS, for_customer)
-                LOCAL_STORAGE[ADPProductClasses.COILS][customer_id] = pricing
-
-            result = CoilsV2(
-                data=[
-                    CoilV2(id=id_, attributes=CoilAttrsV2(**attrs))
-                    for id_, attrs in pricing.items()
-                ]
-            )
-            return result
-        case _:
-            raise Exception(f"Incompatible version used: {version}")
+    result = CoilsV2(
+        data=[
+            CoilV2(id=id_, attributes=CoilAttrsV2(**attrs))
+            for id_, attrs in pricing.items()
+        ]
+    )
+    return result
 
 
-def get_air_handlers(for_customer: ADPCustomer, version: int = 1) -> AHs | AHsV2:
-    match version:
-        case 1:
-            url = ADP_CUSTOMERS + f"/{for_customer.id}/adp-ah-programs"
-            resp: r.Response = r_get(url)
-            data: dict = resp.json()
-            if not data.get("data"):
-                raise Exception("No Air Handlers")
-            customer_ahs = [
-                AH(id=record["id"], attributes=AHAttrs(**record["attributes"]))
-                for record in data["data"]
-            ]
-            customer_ahs.sort(
-                key=lambda ah: (
-                    ah.attributes.stage,
-                    ah.attributes.category,
-                    ah.attributes.tonnage,
-                    ah.attributes.width,
-                )
-            )
-            return AHs(data=customer_ahs)
+def get_air_handlers(for_customer: VendorCustomer) -> AHsV2:
+    customer_id = for_customer.id
+    if stored_ahs := LOCAL_STORAGE[ADPProductClasses.AIR_HANDLERS].get(customer_id):
+        pricing = stored_ahs
+    else:
+        pricing = get_product_from_api(ADPProductClasses.AIR_HANDLERS, for_customer)
+        LOCAL_STORAGE[ADPProductClasses.AIR_HANDLERS][customer_id] = pricing
 
-        case 2:
-            customer_id = for_customer.id
-            if stored_ahs := LOCAL_STORAGE[ADPProductClasses.AIR_HANDLERS].get(
-                customer_id
-            ):
-                pricing = stored_ahs
-            else:
-                pricing = get_product_from_api(
-                    ADPProductClasses.AIR_HANDLERS, for_customer
-                )
-                LOCAL_STORAGE[ADPProductClasses.AIR_HANDLERS][customer_id] = pricing
-
-            result = AHsV2(
-                data=[
-                    AHV2(id=id_, attributes=AHAttrsV2(**attrs))
-                    for id_, attrs in pricing.items()
-                ]
-            )
-            return result
-        case _:
-            raise Exception(f"Incompatible version used: {version}")
+    result = AHsV2(
+        data=[
+            AHV2(id=id_, attributes=AHAttrsV2(**attrs))
+            for id_, attrs in pricing.items()
+        ]
+    )
+    return result
 
 
-def get_ratings(for_customer: ADPCustomer, version: int = 1) -> Ratings:
-    match version:
-        case 1 | 2:
-            url = ADP_CUSTOMERS + f"/{for_customer.id}/adp-program-ratings"
-            resp: r.Response = r_get(url)
-            data: dict = resp.json()
-            if not data.get("data"):
-                raise Exception("No Ratings")
-            customer_ratings = [
-                Rating(
-                    id=record["id"],
-                    attributes=RatingAttrs(**record["attributes"]),
-                    relationships=RatingRels(
-                        adp_customers={
-                            "data": {"id": for_customer.id, "type": "adp-customers"}
-                        }
-                    ),
-                )
-                for record in data["data"]
-            ]
-            customer_ratings.sort(
-                key=lambda rating: (
-                    rating.attributes.outdoor_model,
-                    rating.attributes.indoor_model,
-                )
-            )
-        case _:
-            raise Exception(f"Incompatible version used: {version}")
+def get_ratings(for_customer: VendorCustomer) -> Ratings:
+    url = f"/vendors/adp/{for_customer.id}/adp-program-ratings"
+    resp: r.Response = r_get(url)
+    data: dict = resp.json()
+    if not data.get("data"):
+        raise Exception("No Ratings")
+    customer_ratings = [
+        Rating(
+            id=record["id"],
+            attributes=RatingAttrs(**record["attributes"]),
+            relationships=RatingRels(
+                adp_customers={"data": {"id": for_customer.id, "type": "adp-customers"}}
+            ),
+        )
+        for record in data["data"]
+    ]
+    customer_ratings.sort(
+        key=lambda rating: (
+            rating.attributes.outdoor_model,
+            rating.attributes.indoor_model,
+        )
+    )
     return Ratings(data=customer_ratings)
 
 
-def get_sca_customers_w_adp_accounts(version: int = 1) -> list[SCACustomer]:
-    match version:
-        case 1:
-            page_num = "page_number=0"
-            include = "include=customers"
-            fields = "fields_adp_customers=customers,adp-alias"
-            query_params = "&".join((page_num, include, fields))
-            full_url = ADP_CUSTOMERS + f"?{query_params}"
-            resp: r.Response = r_get(url=full_url)
-            payload = resp.json()
-            adp_customers = {
-                r["id"]: (
-                    r["attributes"]["adp-alias"],
-                    r["relationships"]["customers"]["data"]["id"],
-                )
-                for r in payload["data"]
-            }
-            sca_customers = {
-                r["id"]: r["attributes"]["name"] for r in payload["included"]
-            }
-            result = []
-            for sca_id, sca_name in sca_customers.items():
-                adp_customers_selected = [
-                    ADPCustomer(id=k, adp_alias=v[0])
-                    for k, v in adp_customers.items()
-                    if v[1] == sca_id
-                ]
-                result.append(
-                    SCACustomer(sca_name=sca_name, adp_objs=adp_customers_selected)
-                )
-        case 2:
-            v2_adp_resource = f"/v2/vendors/{VENDOR}"
-            sub_resource = "/vendor-customers"
-            page_num = "page_number=0"
-            includes = "include=customer-location-mapping.customer-locations.customers"
-            url = f"{BACKEND_URL}{v2_adp_resource}{sub_resource}?{includes}&{page_num}"
-            resp: r.Response = r_get(url=url)
-            resp_data = resp.json()
-            data, included = resp_data["data"], resp_data["included"]
-            customers = {
-                r["id"]: r["attributes"]["name"]
-                for r in included
-                if r["type"] == "customers"
-            }
-            customer_by_location = {
-                r["id"]: r["relationships"]["customers"]["data"]["id"]
-                for r in included
-                if r["type"] == "customer-locations"
-            }
-            location_by_mapping = {
-                r["id"]: r["relationships"]["customer-locations"]["data"]["id"]
-                for r in included
-                if r["type"] == "customer-location-mapping"
-            }
-            adp_customers_w_mapping = {
-                r["id"]: (
-                    r["attributes"]["name"],
-                    [
-                        mapping["id"]
-                        for mapping in r["relationships"]["customer-location-mapping"][
-                            "data"
-                        ]
-                    ],
-                )
-                for r in data
-                if r["relationships"]["customer-location-mapping"]["data"]
-            }
-            result = []
-            for sca_id, sca_name in customers.items():
-                locations = [
-                    id_
-                    for id_, customer_id in customer_by_location.items()
-                    if customer_id == sca_id
-                ]
-                mapping_ids_for_locations = [
-                    id_
-                    for id_, location_id in location_by_mapping.items()
-                    if location_id in locations
-                ]
-                adp_customers_selected = [
-                    ADPCustomer(id=id_, adp_alias=v[0])
-                    for id_, v in adp_customers_w_mapping.items()
-                    if set(v[1]) <= set(mapping_ids_for_locations)
-                ]
-                result.append(
-                    SCACustomer(sca_name=sca_name, adp_objs=adp_customers_selected)
-                )
-        case _:
-            raise Exception(f"Incompatible version number used: {version}")
+def get_vendors() -> list[Vendor]:
+    resource = "/v2/vendors"
+    page_num = "page_number=0"
+    url = f"{BACKEND_URL}{resource}?{page_num}"
+    resp: r.Response = r_get(url=url)
+    resp_data = resp.json()
+    return [Vendor(v["id"], v["attributes"]["name"]) for v in resp_data["data"]]
 
+
+def get_sca_customers_w_vendor_accounts(vendor: Vendor) -> list[SCACustomerV2]:
+    v2_vendor_resource = f"/v2/vendors/{vendor.id}/vendor-customers"
+    page_num = "page_number=0"
+    includes = "include=customer-location-mapping.customer-locations.customers"
+    url = f"{BACKEND_URL}{v2_vendor_resource}?{includes}&{page_num}"
+    resp: r.Response = r_get(url=url)
+    resp_data = resp.json()
+    data, included = resp_data["data"], resp_data["included"]
+    customers = {
+        r["id"]: r["attributes"]["name"] for r in included if r["type"] == "customers"
+    }
+    customer_by_location = {
+        r["id"]: r["relationships"]["customers"]["data"]["id"]
+        for r in included
+        if r["type"] == "customer-locations"
+    }
+    location_by_mapping = {
+        r["id"]: r["relationships"]["customer-locations"]["data"]["id"]
+        for r in included
+        if r["type"] == "customer-location-mapping"
+    }
+    vendor_customers_w_mapping = {
+        r["id"]: (
+            r["attributes"]["name"],
+            [
+                mapping["id"]
+                for mapping in r["relationships"]["customer-location-mapping"]["data"]
+            ],
+        )
+        for r in data
+        if r["relationships"]["customer-location-mapping"]["data"]
+    }
+    result: list[SCACustomerV2] = []
+    for sca_id, sca_name in customers.items():
+        locations = [
+            id_
+            for id_, customer_id in customer_by_location.items()
+            if customer_id == sca_id
+        ]
+        mapping_ids_for_locations = [
+            id_
+            for id_, location_id in location_by_mapping.items()
+            if location_id in locations
+        ]
+        vendor_customers_selected = [
+            VendorCustomer(id=id_, vendor=vendor, name=v[0])
+            for id_, v in vendor_customers_w_mapping.items()
+            if set(v[1]) <= set(mapping_ids_for_locations)
+        ]
+        vendor_customers_selected.sort(key=lambda vc: vc.name)
+        customer_obj = SCACustomerV2(
+            sca_id=sca_id,
+            sca_name=sca_name,
+            vendor=vendor,
+            entity_accounts=vendor_customers_selected,
+        )
+        result.append(customer_obj)
+
+    result.sort(key=lambda c: c.sca_name)
     return result
 
 
@@ -496,7 +406,8 @@ def request_dl_link(customer_id: int, stage: Stage) -> str:
     return resp.json()["downloadLink"]
 
 
-def download_file(customer_id: str, stage: Stage) -> None:
+def download_file(customer_id: str) -> None:
+    stage = Stage.PROPOSED
     rel_link = request_dl_link(customer_id, stage)
     resp: r.Response = r_get(BACKEND_URL + rel_link)
     if resp.status_code != 200:
@@ -513,23 +424,6 @@ def download_file(customer_id: str, stage: Stage) -> None:
         raise FileSaveError(filename=filename)
     except Exception:
         raise Exception(rf"unexpected error with file save to {save_path}")
-
-
-def patch_new_coil_status(
-    customer_id: int, coil_id: int, new_status: Stage
-) -> r.Response:
-    url = COILS + f"/{coil_id}"
-    payload = {
-        "data": {
-            "id": coil_id,
-            "type": "adp-coil-programs",
-            "attributes": {"stage": new_status.value},
-            "relationships": {
-                "adp-customers": {"data": {"id": customer_id, "type": "adp-customers"}}
-            },
-        }
-    }
-    return r_patch(url=url, json=payload)
 
 
 def price_check(customer_id: int, model: str, *args, **kwargs) -> r.Response:
@@ -632,9 +526,7 @@ def new_product_setup(
 
     # map model to its product classes
     for cl in [material_group, class_1.value]:
-        product_class_query = (
-            f"/v2/vendors/{VENDOR}/vendor-product-classes?filter_name={cl}"
-        )
+        product_class_query = f"/v2/vendors/adp/vendor-product-classes?filter_name={cl}"
         product_class_resp: r.Response = r_get(url=BACKEND_URL + product_class_query)
         product_class_resp_data = product_class_resp.json()["data"]
         if isinstance(product_class_resp_data, list):
@@ -690,7 +582,7 @@ def post_new_product(customer_id: int, model: str, class_1: ADPProductClasses) -
 
     PRICING_CLASS_ID = 2  # being lazy - for STRATEGY_PRICING
     product_resource = (
-        f"/v2/vendors/{VENDOR}/vendor-products?filter_vendor_product_identifier={model}"
+        f"/v2/vendors/adp/vendor-products?filter_vendor_product_identifier={model}"
     )
 
     product_check_resp: r.Response = r_get(url=BACKEND_URL + product_resource)
@@ -836,21 +728,6 @@ def post_new_product(customer_id: int, model: str, class_1: ADPProductClasses) -
     return product_result
 
 
-def patch_new_ah_status(customer_id: int, ah_id: int, new_status: Stage) -> r.Response:
-    url = AHS + f"/{ah_id}"
-    payload = {
-        "data": {
-            "id": ah_id,
-            "type": "adp-ah-programs",
-            "attributes": {"stage": new_status.value},
-            "relationships": {
-                "adp-customers": {"data": {"id": customer_id, "type": "adp-customers"}}
-            },
-        }
-    }
-    return r_patch(url=url, json=payload)
-
-
 def post_new_ratings(customer_id: int, file: str) -> None:
     if not file:
         raise UploadError("no file selected")
@@ -872,16 +749,3 @@ def post_new_ratings(customer_id: int, file: str) -> None:
             f"Status code {resp.status_code}. "
             f"Message:\n {resp.content.decode()}"
         )
-
-
-def delete_rating(rating_id: int, customer_id: int) -> r.Response:
-    resp: r.Response = r_delete(
-        url=RATINGS + f"/{rating_id}?adp_customer_id={customer_id}"
-    )
-    if code := resp.status_code != 204:
-        raise Exception(
-            f"Error with delete operation. "
-            f"Status: {code}.\n "
-            f"Message = {resp.content.decode()}"
-        )
-    return resp
