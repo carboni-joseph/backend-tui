@@ -19,16 +19,13 @@ from models import (
 )
 from actions import (
     download_file,
-    get_coils,
     FileSaveError,
     patch_new_coil_status,
     post_new_coil,
     select_file,
     get_sca_customers_w_adp_accounts,
-    get_air_handlers,
     patch_new_ah_status,
     post_new_ah,
-    get_ratings,
     post_new_ratings,
     delete_rating,
     price_check,
@@ -330,51 +327,58 @@ def action_chosen(
     choice = Actions(choice)
     match choice:
         case Actions.DOWNLOAD_PROGRAM:
-            new_title = "Include Proposed Line Items?"
-            choices = [
-                ProgramTypeSelection("Yes", Stage.PROPOSED),
-                ProgramTypeSelection("No", Stage.ACTIVE),
-            ]
-            new_menu = partial(
-                menu,
+            # new_title = "Include Proposed Line Items?"
+            # choices = [
+            #     ProgramTypeSelection("Yes", Stage.PROPOSED),
+            #     ProgramTypeSelection("No", Stage.ACTIVE),
+            # ]
+            program_type_selected(
+                customer,
                 frame,
-                new_title,
-                partial(program_type_selected, customer),
-                choices=choices,
-                label_attrs=["label"],
+                ProgramTypeSelection("Yes", Stage.PROPOSED),
+                None,
             )
-            show_new_screen(frame, new_menu, NAV_STACK)
+            # new_menu = partial(
+            #     menu,
+            #     frame,
+            #     new_title,
+            #     partial(program_type_selected, customer),
+            #     choices=choices,
+            #     label_attrs=["label"],
+            # )
+            # show_new_screen(frame, new_menu, NAV_STACK)
         case Actions.UPLOAD_RATINGS:
             upload_ratings(customer, select_file())
-        case Actions.REVIEW_RATINGS:
-            try:
-                ratings = get_ratings(for_customer=customer).data
-            except Exception as e:
-                flash_text = urwid.Text(("flash_bad", "No Ratings to Display"))
-                flash_detail = urwid.Text(("flash_bad", str(e)))
-                frame.header = urwid.Pile([flash_text, flash_detail, frame.header])
-            else:
-                displayable = [
-                    "ahrinumber",
-                    "outdoor_model",
-                    "indoor_model",
-                    "effective_date",
-                ]
-                new_menu = partial(
-                    menu,
-                    frame,
-                    "Ratings",
-                    confirm_rating_delete,
-                    ratings,
-                    None,
-                    True,
-                    displayable,
-                )
-                show_new_screen(frame, new_menu, NAV_STACK)
+        # case Actions.REVIEW_RATINGS:
+        # try:
+        #     ratings = get_ratings(for_customer=customer).data
+        # except Exception as e:
+        #     flash_text = urwid.Text(("flash_bad", "No Ratings to Display"))
+        #     flash_detail = urwid.Text(("flash_bad", str(e)))
+        #     frame.header = urwid.Pile([flash_text, flash_detail, frame.header])
+        # else:
+        #     displayable = [
+        #         "ahrinumber",
+        #         "outdoor_model",
+        #         "indoor_model",
+        #         "effective_date",
+        #     ]
+        #     new_menu = partial(
+        #         menu,
+        #         frame,
+        #         "Ratings",
+        #         confirm_rating_delete,
+        #         ratings,
+        #         None,
+        #         True,
+        #         displayable,
+        #     )
+        #     show_new_screen(frame, new_menu, NAV_STACK)
         case Actions.VIEW_COILS:
             routes = []
             try:
-                coils = get_coils(for_customer=customer).data
+                # coils = get_coils(for_customer=customer).data
+                raise Exception
             except:
                 flash_text = urwid.Text(("flash_bad", "No Coils on prgram"))
                 frame.header = urwid.Pile([flash_text, frame.header])
@@ -411,7 +415,8 @@ def action_chosen(
         case Actions.VIEW_AHS:
             routes = []
             try:
-                ahs = get_air_handlers(for_customer=customer).data
+                # ahs = get_air_handlers(for_customer=customer).data
+                raise Exception
             except:
                 flash_text = urwid.Text(("flash_bad", "No Air Handlers to Display"))
                 frame.header = urwid.Pile([flash_text, frame.header])
@@ -444,8 +449,8 @@ def action_chosen(
                     routing_menu, frame, NAV_STACK, f"{customer.adp_alias}", routes
                 )
                 show_new_screen(frame, new_menu, NAV_STACK)
-        case Actions.VIEW_ACCESSORIES:
-            ...
+        # case Actions.VIEW_ACCESSORIES:
+        #     pass
         case Actions.PRICE_CHECK:
             show_new_screen(frame, partial(do_model_lookup, customer), NAV_STACK)
         case _:

@@ -34,10 +34,10 @@ class ProgramTypeSelection:
 class Actions(StrEnum):
     DOWNLOAD_PROGRAM = "Download Program"
     UPLOAD_RATINGS = "Upload Ratings"
-    REVIEW_RATINGS = "Review Ratings"
+    # REVIEW_RATINGS = "Review Ratings"
     VIEW_COILS = "Coils"
     VIEW_AHS = "Air Handlers"
-    VIEW_ACCESSORIES = "Accessories"
+    # VIEW_ACCESSORIES = "Accessories"
     PRICE_CHECK = "Price Check"
 
 
