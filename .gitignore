@@ -2,3 +2,4 @@ __pycache__
 *.ini
 .venv
 *.json
+debug.txt
