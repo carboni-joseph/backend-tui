@@ -1,25 +1,19 @@
 import json
 import re
 import os
-from dataclasses import dataclass
-from datetime import datetime
-from pathlib import Path
-from typing import Callable
-from collections import defaultdict
 import requests as r
 import configparser
-from enum import StrEnum
+from pathlib import Path
+from datetime import datetime
+from dataclasses import dataclass
+from enum import StrEnum, Enum
+from typing import Callable, Any
+from collections import defaultdict
 from functools import partial, wraps
 from tkinter import Tk, filedialog
 from models import (
-    ADPCustomer,
     SCACustomerV2,
-    CoilAttrsV2,
-    CoilV2,
-    CoilsV2,
-    AHAttrsV2,
-    AHV2,
-    AHsV2,
+    ProductPriceBasic,
     Stage,
     Rating,
     Ratings,
@@ -35,6 +29,15 @@ configs = configparser.ConfigParser()
 configs.read("config.ini")
 
 
+def debug(content: Any) -> None:
+    with open("debug.txt", "w"):
+        match content:
+            case dict():
+                ...
+            case str():
+                ...
+
+
 def reset_request_methods() -> None:
     AuthToken.get_new_token()
     global r_get, r_post, r_patch, r_delete
@@ -47,11 +50,13 @@ def reset_request_methods() -> None:
 class ADPPricingClasses(StrEnum):
     ZERO_DISCOUNT = "ZERO_DISCOUNT"
     STRATEGY_PRICING = "STRATEGY_PRICING"
+    PREFERRED_PARTS = "PREFERRED_PARTS"
+    STANDARD_PARTS = "STANDARD_PARTS"
 
 
-class ADPProductClasses(StrEnum):
-    COILS = "Coils"
-    AIR_HANDLERS = "Air Handlers"
+class ADPProductClasses(Enum):
+    COILS = {"name": "Coils", "rank": 1}
+    AIR_HANDLERS = {"name": "Air Handlers", "rank": 1}
 
 
 @dataclass
@@ -69,7 +74,7 @@ class NewProductDetails:
     material_group: str
 
 
-LOCAL_STORAGE = {ADPProductClasses.COILS: {}, ADPProductClasses.AIR_HANDLERS: {}}
+LOCAL_STORAGE = {"pricing_by_customer": {}}
 
 
 def restructure_included(included: list[dict], primary: str, ids: list[int] = None):
@@ -247,8 +252,8 @@ def get_product_from_api(
     ]
     include = "include=" + ",".join(incl for incl in includes)
     filters = {
-        "filter_vendor_product_classes__name": [product_type.value],
-        "filter_vendor_product_classes__rank": [1],
+        "filter_vendor_product_classes__name": [product_type.value["name"]],
+        "filter_vendor_product_classes__rank": [product_type.value["rank"]],
     }
     filters_formatted = "&".join(
         f"{k}={','.join(str(i) for i in v)}" for k, v in filters.items()
@@ -266,37 +271,29 @@ def get_product_from_api(
     return pricing
 
 
-def get_coils(for_customer: VendorCustomer) -> CoilsV2:
+def get_pricing_by_customer(for_customer: VendorCustomer) -> list[ProductPriceBasic]:
     customer_id = for_customer.id
-    if stored_coils := LOCAL_STORAGE[ADPProductClasses.COILS].get(customer_id):
-        pricing = stored_coils
+    vendor_id = for_customer.vendor.id
+    if stored_pricing := LOCAL_STORAGE["pricing_by_customer"].get(customer_id):
+        pricing = stored_pricing
     else:
-        pricing = get_product_from_api(ADPProductClasses.COILS, for_customer)
-        LOCAL_STORAGE[ADPProductClasses.COILS][customer_id] = pricing
+        pricing_url = (
+            BACKEND_URL + f"/v2/vendors/{vendor_id}/vendor-customers/{customer_id}"
+        )
+        includes = "include=vendor-pricing-by-customer.vendor-products"
+        resp: r.Response = r_get(f"{pricing_url}?{includes}")
+        data: dict = resp.json()
+        if not data.get("data"):
+            raise Exception("No product")
 
-    result = CoilsV2(
-        data=[
-            CoilV2(id=id_, attributes=CoilAttrsV2(**attrs))
-            for id_, attrs in pricing.items()
-        ]
-    )
-    return result
+        includes_pricing_by_customer = restructure_included(
+            data["included"], "vendor-pricing-by-customer"
+        )
+        pricing = restructure_pricing_by_customer(includes_pricing_by_customer)
+        LOCAL_STORAGE["pricing_by_customer"][customer_id] = pricing
 
-
-def get_air_handlers(for_customer: VendorCustomer) -> AHsV2:
-    customer_id = for_customer.id
-    if stored_ahs := LOCAL_STORAGE[ADPProductClasses.AIR_HANDLERS].get(customer_id):
-        pricing = stored_ahs
-    else:
-        pricing = get_product_from_api(ADPProductClasses.AIR_HANDLERS, for_customer)
-        LOCAL_STORAGE[ADPProductClasses.AIR_HANDLERS][customer_id] = pricing
-
-    result = AHsV2(
-        data=[
-            AHV2(id=id_, attributes=AHAttrsV2(**attrs))
-            for id_, attrs in pricing.items()
-        ]
-    )
+    result = [ProductPriceBasic(id=id_, **attrs) for id_, attrs in pricing.items()]
+    result.sort(key=lambda p: p.model_number)
     return result
 
 
@@ -444,12 +441,28 @@ def custom_response(data: dict) -> r.Response:
 def post_new_coil(customer_id: int, model: str) -> r.Response:
     coils = ADPProductClasses.COILS
     data = post_new_product(customer_id=customer_id, model=model, class_1=coils)
+    with open("debug.txt", "w") as f:
+        import json
+
+        f.write(json.dumps(data, indent=2))
+    data["attributes"]["price"] = data["attributes"].pop("net-price")
+    LOCAL_STORAGE["pricing_by_customer"][customer_id] |= {
+        data["id"]: data["attributes"]
+    }
     return custom_response(data=data)
 
 
 def post_new_ah(customer_id: int, model: str) -> r.Response:
     ahs = ADPProductClasses.AIR_HANDLERS
     data = post_new_product(customer_id=customer_id, model=model, class_1=ahs)
+    with open("debug.txt", "w") as f:
+        import json
+
+        f.write(json.dumps(data, indent=2))
+    data["attributes"]["price"] = data["attributes"].pop("net-price")
+    LOCAL_STORAGE["pricing_by_customer"][customer_id] |= {
+        data["id"]: data["attributes"]
+    }
     return custom_response(data=data)
 
 
@@ -525,7 +538,7 @@ def new_product_setup(
         r_post(url=BACKEND_URL + new_product_attr_route, json=dict(data=payload))
 
     # map model to its product classes
-    for cl in [material_group, class_1.value]:
+    for cl in [material_group, class_1.value["name"]]:
         product_class_query = f"/v2/vendors/adp/vendor-product-classes?filter_name={cl}"
         product_class_resp: r.Response = r_get(url=BACKEND_URL + product_class_query)
         product_class_resp_data = product_class_resp.json()["data"]
@@ -570,7 +583,9 @@ def new_product_setup(
     )
 
 
-def post_new_product(customer_id: int, model: str, class_1: ADPProductClasses) -> dict:
+def post_new_product(
+    customer_id: int, model: str, class_1: ADPProductClasses
+) -> dict[str, int | dict]:
     """
     STEPS
         check for existence
@@ -655,6 +670,7 @@ def post_new_product(customer_id: int, model: str, class_1: ADPProductClasses) -
         model_lookup_content |= {"model-returned": model_returned}
         model_lookup_content |= {"model-number": model_returned}
         model_lookup_content |= {"mpg": material_group}
+        model_lookup_content |= {"net-price": net_price}
 
         product_result = dict(id=new_pricing_id, attributes=model_lookup_content)
     else:

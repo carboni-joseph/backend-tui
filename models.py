@@ -1,9 +1,20 @@
 from datetime import datetime
 from dataclasses import dataclass
+from enum import StrEnum, auto, Enum
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, Callable, Iterable, Literal
-from enum import StrEnum, auto
 from urwid import Columns, Text, AttrMap, Widget, Align
+
+
+class Palette(Enum):
+    REVERSED = ("reversed", "standout", "")
+    HEADER = ("header", "white", "black")
+    FLASH_BAD = ("flash_bad", "white", "dark red", "standout")
+    FLASH_GOOD = ("flash_good", "white", "dark green", "standout")
+    SELECTOR = ("selector", "light cyan", "")
+    NORMAL = ("normal", "white", "")
+    NORM_RED = ("norm_red", "dark red", "")
+    NORM_GREEN = ("norm_green", "dark green", "")
 
 
 @dataclass
@@ -55,9 +66,7 @@ class ADPActions(StrEnum):
     DOWNLOAD_PROGRAM = "Download Program"
     UPLOAD_RATINGS = "Upload Ratings"
     # REVIEW_RATINGS = "Review Ratings"
-    VIEW_COILS = "Coils"
-    VIEW_AHS = "Air Handlers"
-    # VIEW_ACCESSORIES = "Accessories"
+    PRODUCT = "Product Strategy"
     PRICE_CHECK = "Price Check"
 
 
@@ -114,6 +123,20 @@ class CoilAttrs(BaseModel):
     stage: str
 
 
+class ProductPriceBasic(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, protected_namespaces={})
+    id: int
+    model_number: str = Field(alias="model-number")
+    description: Optional[str] = None
+    price: int
+    effective_date: datetime = Field(default=None, alias="effective-date")
+
+    def model_post_init(self, __context) -> None:
+        self.price = int(self.price / 100)
+        self.effective_date: str = str(self.effective_date)
+        return super().model_post_init(__context)
+
+
 class CoilAttrsV2(BaseModel):
     model_config = ConfigDict(populate_by_name=True, protected_namespaces={})
     category: str
@@ -143,17 +166,8 @@ class Coil(BaseModel):
     attributes: CoilAttrs
 
 
-class CoilV2(BaseModel):
-    id: int
-    attributes: CoilAttrsV2
-
-
 class Coils(BaseModel):
     data: list[Coil]
-
-
-class CoilsV2(BaseModel):
-    data: list[CoilV2]
 
 
 class AHAttrs(BaseModel):
