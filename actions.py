@@ -1,6 +1,7 @@
 import json
 import re
 import os
+import logging
 import requests as r
 import configparser
 from pathlib import Path
@@ -9,6 +10,7 @@ from dataclasses import dataclass
 from enum import StrEnum, Enum
 from typing import Callable, Any
 from collections import defaultdict
+import concurrent.futures as futures
 from functools import partial, wraps
 from tkinter import Tk, filedialog
 from models import (
@@ -24,18 +26,21 @@ from models import (
 )
 from auth import AuthToken
 
+logger = logging.getLogger(__name__)
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 configs = configparser.ConfigParser()
 configs.read("config.ini")
 
 
 def debug(content: Any) -> None:
-    with open("debug.txt", "w"):
+    with open("debug.txt", "w") as f:
         match content:
             case dict():
-                ...
+                f.write(json.dumps(content, indent=4))
             case str():
-                ...
+                f.write(content)
+            case tuple():
+                f.write(", ".join(content))
 
 
 def reset_request_methods() -> None:
@@ -441,10 +446,6 @@ def custom_response(data: dict) -> r.Response:
 def post_new_coil(customer_id: int, model: str) -> r.Response:
     coils = ADPProductClasses.COILS
     data = post_new_product(customer_id=customer_id, model=model, class_1=coils)
-    with open("debug.txt", "w") as f:
-        import json
-
-        f.write(json.dumps(data, indent=2))
     data["attributes"]["price"] = data["attributes"].pop("net-price")
     LOCAL_STORAGE["pricing_by_customer"][customer_id] |= {
         data["id"]: data["attributes"]
@@ -471,6 +472,7 @@ def new_product_setup(
 ) -> NewProductDetails:
 
     # look up model
+    logger.info("\tLooking up model details")
     model_lookup_query = f"?model_num={model}&customer_id={customer_id}"
     model_lookup_resp: r.Response = r_get(url=MODEL_LOOKUP + model_lookup_query)
     model_lookup_content: dict = model_lookup_resp.json()
@@ -503,11 +505,13 @@ def new_product_setup(
     new_product_resp: r.Response = r_post(
         url=BACKEND_URL + new_product_route, json=dict(data=pl)
     )
+    logger.info("\tProduct parent record with model and description registered")
     new_product_data = new_product_resp.json()["data"]
     new_product_id = int(new_product_data["id"])
 
     # associate stable product attributes to product
     payloads = []
+    logger.info("\tSetting up attributes")
     for attr, value in model_lookup_content.items():
         attr: str
         try:
@@ -534,8 +538,15 @@ def new_product_setup(
         payloads.append(pl)
 
     new_product_attr_route = "/v2/vendors/vendor-product-attrs"
-    for payload in payloads:
+
+    def post_attribute(payload: dict) -> None:
+        attr, value = payload["attributes"]["attr"], payload["attributes"]["value"]
         r_post(url=BACKEND_URL + new_product_attr_route, json=dict(data=payload))
+        logger.info(f"\t  * {attr} = {value}")
+
+    with futures.ThreadPoolExecutor() as executor:
+        futures_ = [executor.submit(post_attribute, payload) for payload in payloads]
+        futures.wait(futures_)
 
     # map model to its product classes
     for cl in [material_group, class_1.value["name"]]:
@@ -567,6 +578,7 @@ def new_product_setup(
             },
         }
         r_post(BACKEND_URL + mapping_ep, json=dict(data=pl))
+        logger.info(f"\tMapped to class: {cl}")
 
     return NewProductDetails(
         id=new_product_id,
@@ -600,9 +612,12 @@ def post_new_product(
         f"/v2/vendors/adp/vendor-products?filter_vendor_product_identifier={model}"
     )
 
+    logger.info(f"\tChecking for existence.")
     product_check_resp: r.Response = r_get(url=BACKEND_URL + product_resource)
     if product_check_resp.status_code == 204:
+        logger.info(f"\t{model} needs to be built")
         new_product_details = new_product_setup(customer_id, model, class_1)
+        logger.info(f"\t{model} has been setup")
         new_product_id = new_product_details.id
         zero_discount_price = new_product_details.zero_discount_price
         material_group_discount = new_product_details.material_group_discount
@@ -640,6 +655,7 @@ def post_new_product(
         resp: r.Response = r_post(
             url=BACKEND_URL + customer_pricing_ep, json=dict(data=pl)
         )
+        logger.info("\tPricing set.")
         new_pricing_id = resp.json()["data"]["id"]
 
         # set a customer price attr, custom_description, to the default for the product
@@ -661,6 +677,7 @@ def post_new_product(
         resp: r.Response = r_post(
             url=BACKEND_URL + customer_price_attr_ep, json=dict(data=pl)
         )
+        logger.info("\tCustom description established")
         # add these back in for the return object
         model_lookup_content |= {"zero-discount-price": zero_discount_price}
         model_lookup_content |= {"material-group-discount": material_group_discount}
@@ -674,6 +691,7 @@ def post_new_product(
 
         product_result = dict(id=new_pricing_id, attributes=model_lookup_content)
     else:
+        logger.info(f"\t{model} exists. Performing lookup.")
         existing_product_data = product_check_resp.json()["data"]
         if isinstance(existing_product_data, list):
             filtered = [
@@ -719,6 +737,7 @@ def post_new_product(
             url=BACKEND_URL + customer_pricing_ep, json=dict(data=pl)
         )
         new_pricing_id = resp.json()["data"]["id"]
+        logger.info("\tPricing set.")
 
         # set a customer price attr, custom_description, to the default for the product
         customer_price_attr_ep = "/v2/vendors/vendor-pricing-by-customer-attrs"
@@ -739,6 +758,7 @@ def post_new_product(
         resp: r.Response = r_post(
             url=BACKEND_URL + customer_price_attr_ep, json=dict(data=pl)
         )
+        logger.info("\tCustom description established")
         product_result = dict(id=new_pricing_id, attributes=model_lookup_content)
 
     return product_result

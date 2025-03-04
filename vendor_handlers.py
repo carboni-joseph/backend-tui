@@ -1,4 +1,5 @@
 import urwid
+import logging
 from requests import Response
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Callable
@@ -18,6 +19,8 @@ from functools import partial
 
 if TYPE_CHECKING:
     from main import Application
+
+logger = logging.getLogger(__name__)
 
 
 class VendorHandler(ABC):
@@ -39,25 +42,6 @@ class ADPHandler(VendorHandler):
             self.action_chosen,
             choices=ADPActions,
         )
-
-    def program_type_selected(self) -> None:
-        try:
-            customer = self.app.vendor_customer
-            download_file(customer.id)
-        except FileSaveError as e:
-            response = (
-                "There was an error trying to save the file. "
-                f"If an existing file with the name {e.filename} is open, "
-                "please close it and try downloading again."
-            )
-            response_text = urwid.Text(("flash_bad", response))
-        except Exception as e:
-            response_text = urwid.Text(("flash_bad", str(e)))
-        else:
-            response = f"Strategy file downloaded for {customer.name}"
-            response_text = urwid.Text(("flash_good", response))
-        self.app.go_back()
-        self.app.frame.header = urwid.Pile([response_text, self.app.frame.header])
 
     def add_new_model(self, submit_method: Callable) -> urwid.ListBox:
         self.user_input = urwid.Edit("Enter Model Number: ")
@@ -136,13 +120,12 @@ class ADPHandler(VendorHandler):
         results = list()
         total_items = len(model_list)
         for i, model in enumerate(model_list):
-            current_msg = urwid.Text(
-                ("flash_good", f"Working on {model}  ({i+1} of {total_items})")
-            )
-            debug(current_msg.text)
+            current_msg = f"Working on {model}  ({i+1} of {total_items})"
+            logger.info(current_msg)
             resp: Response = product_type_method(customer.id, model)
             body = resp.json()
             if resp.status_code == 200:
+                logger.info("Success")
                 body_data: dict[str, str | dict] = body["data"]
                 response_header = urwid.Text(
                     (
@@ -152,6 +135,7 @@ class ADPHandler(VendorHandler):
                     )
                 )
             else:
+                logger.error("Failure")
                 response_header = urwid.Text(
                     ("flash_bad", f"Unable to add model {model}")
                 )
@@ -178,23 +162,32 @@ class ADPHandler(VendorHandler):
         match choice:
             case ADPActions.DOWNLOAD_PROGRAM:
                 try:
+                    logger.info(
+                        f"Downloading {customer.vendor.name} file for {customer.name}"
+                    )
                     download_file(customer_id=customer.id)
                 except Exception as e:
                     flash_text = urwid.Text(
                         ("flash_bad", f"an error occured - {str(e)}"), align="center"
                     )
+                    logger.error(f"{e}")
                 else:
                     flash_text = urwid.Text(
                         ("flash_good", "downloaded file"), align="center"
                     )
+                    logger.info("Done.")
                 finally:
                     self.app.frame.header = urwid.Pile(
                         [flash_text, self.app.frame.header]
                     )
             case ADPActions.UPLOAD_RATINGS:
-                self.upload_ratings(select_file())
+                file = select_file()
+                logging.info(f"uploading ratings from {file}")
+                self.upload_ratings()
             case ADPActions.PRODUCT:
+                logging.info(f"Getting products for {customer.name}...")
                 products = get_pricing_by_customer(customer)
+                logging.info(f"Done")
                 routes = []
                 new_coil = Route(
                     callable_=self.add_new_coil,

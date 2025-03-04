@@ -5,6 +5,7 @@ from os.path import dirname, abspath
 from pathlib import Path
 from configparser import ConfigParser
 from auth import set_up_token
+import logging
 
 set_up_token()
 from models import SCACustomer, SCACustomerV2, Vendor, VendorCustomer, Route, Palette
@@ -20,6 +21,15 @@ BASE_YEAR = CONFIGS["OTHER"]["price_year"]
 V2_AVAILABILITY_ENDPOINT = BACKEND_URL + "/v2"
 
 CACHE = {}
+
+logging.basicConfig(
+    filename="log.log",
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+    filemode="a",
+)
+
+logger = logging.getLogger(__name__)
 
 
 class Application:
@@ -48,8 +58,6 @@ class Application:
             dividechars=3,
         )
 
-        # self.all_adp_customers = get_sca_customers_w_adp_accounts()
-
         main = urwid.Padding(self.welcome_screen(), left=2, right=2)
         self.frame = urwid.Frame(main)
         self.frame.footer = button_row
@@ -74,12 +82,14 @@ class Application:
         self.main_loop.run()
 
     def top_menu(self, button=None) -> urwid.ListBox | None:
+        logger.info("Getting Vendors ...")
         menu_widget = self.menu(
             "Choose a vendor:",
             self.vendor_chosen,
             choices=get_vendors(),
             label_attrs=["name"],
         )
+        logger.info("Done.")
         self.frame.set_focus("body")
         if button:
             self.frame.body = menu_widget
@@ -156,7 +166,7 @@ class Application:
         headers: list[str] = None,
     ) -> urwid.ListBox:
         """Builds the menu UI with the given choices."""
-        self.frame.header = urwid.AttrMap(urwid.Text(title), "header")
+        self.frame.header = urwid.AttrMap(urwid.Text(title), Palette.HEADER.value[0])
         body = [urwid.Divider()]
         if as_table:
             body.append(TableHeader([" "] + headers))
@@ -242,11 +252,14 @@ class Application:
             msg = f"{vendor.name} has not been implemented yet"
             text = urwid.Text(("flash_bad", msg))
             self.frame.header = urwid.Pile([text, self.frame.header])
+            logger.warning(msg)
         else:
             new_title = f"Choose the SCA Customer for {vendor.name}:"
             entities = CACHE.get(vendor.id, None)
             if not entities:
+                logger.info(f"Getting customers for {vendor.name}")
                 entities = get_sca_customers_w_vendor_accounts(vendor)
+                logger.info("Done.")
                 CACHE[vendor.id] = entities
 
             self.next_screen = partial(
