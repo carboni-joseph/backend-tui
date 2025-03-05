@@ -669,6 +669,7 @@ def post_new_product(
         resp: r.Response = r_post(
             url=BACKEND_URL + customer_price_attr_ep, json=dict(data=pl)
         )
+        new_attr = resp.json()
         logger.info("\tCustom description established")
         # add these back in for the return object
         model_lookup_content |= {"zero-discount-price": zero_discount_price}
@@ -681,7 +682,14 @@ def post_new_product(
         model_lookup_content |= {"mpg": material_group}
         model_lookup_content |= {"net-price": net_price}
 
-        model_lookup_content["attrs"] = {"custom_description": default_description}
+        model_lookup_content["attrs"] = {
+            "custom_description": {
+                "id": new_attr["data"]["id"],
+                "attr": new_attr["data"]["attributes"]["attr"],
+                "type_": new_attr["data"]["attributes"]["type"],
+                "value": new_attr["data"]["attributes"]["value"],
+            }
+        }
         product_result = dict(id=new_pricing_id, attributes=model_lookup_content)
     else:
         logger.info(f"\t{model} exists. Performing lookup.")
@@ -752,7 +760,15 @@ def post_new_product(
             url=BACKEND_URL + customer_price_attr_ep, json=dict(data=pl)
         )
         logger.info("\tCustom description established")
-        model_lookup_content["attrs"] = {"custom_description": default_description}
+        new_attr = resp.json()
+        model_lookup_content["attrs"] = {
+            "custom_description": {
+                "id": new_attr["data"]["id"],
+                "attr": new_attr["data"]["attributes"]["attr"],
+                "type_": new_attr["data"]["attributes"]["type"],
+                "value": new_attr["data"]["attributes"]["value"],
+            }
+        }
         product_result = dict(id=new_pricing_id, attributes=model_lookup_content)
 
     return product_result
