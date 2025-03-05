@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Callable
 from models import ADPActions, Route, Palette
 from actions import (
     download_file,
-    FileSaveError,
     price_check,
     get_pricing_by_customer,
     post_new_coil,
@@ -149,8 +148,10 @@ class ADPHandler(VendorHandler):
             post_new_ratings(customer.id, selected_file)
         except Exception as e:
             header_text = urwid.Text(("flash_bad", str(e)))
+            logging.info(f"error uploading ratings: {e}")
         else:
             header_text = urwid.Text(("flash_good", "Successfully uploaded ratings"))
+            logging.info(f"ratings uploaded")
         finally:
             self.app.frame.header = urwid.Pile([header_text, self.app.frame.header])
 
@@ -201,15 +202,32 @@ class ADPHandler(VendorHandler):
                     callable_title="Enter Air Handler Model Number",
                 )
                 routes.append(new_ah)
-                routes.append(urwid.Divider("-"))
+                routes.append(urwid.Divider("="))
                 routes.append(
-                    urwid.Text((Palette.NORMAL.value[0], "Strategy Products\n"))
+                    urwid.Text(
+                        (Palette.NORMAL.value[0], "Strategy Products"),
+                        align="center",
+                    )
                 )
-                for p in products:
+                cats = set()
+                offset = 0
+                for row, p in enumerate(products, start=9):
+                    category = p.attrs.get("custom_description", "")
+                    if category not in cats:
+                        routes.append(urwid.Divider("-"))
+                        routes.append(
+                            urwid.Text(
+                                (Palette.NORMAL.value[0], f"{category}"),
+                                align="center",
+                            )
+                        )
+                        cats.add(category)
+                        offset += 5
                     route = Route(
+                        # TODO SET UP THE NEXT MENUS
                         callable_=None,
-                        callable_title="select attribute",
-                        choice_title=p.model_number,
+                        callable_title="Select attribute to edit",
+                        choice_title=f"{row+offset:03}   {p.model_number}",
                     )
                     routes.append(route)
                 self.app.next_screen = partial(
