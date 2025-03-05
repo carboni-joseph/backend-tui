@@ -4,6 +4,7 @@ import os
 import logging
 import requests as r
 import configparser
+from pydantic import BaseModel
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
@@ -40,8 +41,10 @@ def debug(content: Any) -> None:
                 f.write(json.dumps(content, indent=4))
             case str():
                 f.write(content)
-            case tuple():
+            case tuple() | list() | set():
                 f.write(", ".join(content))
+            case BaseModel():
+                f.write(str(content))
 
 
 def reset_request_methods() -> None:
@@ -127,6 +130,7 @@ def restructure_pricing_by_class(obj: dict) -> dict:
                 for product_price in price_class["vendor-pricing-by-class"].values():
                     product_price: dict[str, int | None | dict]
                     id_, product_info = product_price["vendor-products"].popitem()
+                    product_info: dict
                     product_attrs: dict = product_info.get("vendor-product-attrs", {})
                     if product_attrs:
                         product_attrs = {
