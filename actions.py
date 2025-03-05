@@ -142,23 +142,33 @@ def restructure_pricing_by_class(obj: dict) -> dict:
     return result
 
 
-def restructure_pricing_by_customer(obj: dict) -> dict:
+def restructure_pricing_by_customer(
+    obj: dict[str, dict | str]
+) -> dict[str, dict[str, str | dict[str | str]]]:
     result = dict()
     for product_price in obj.values():
         product_price: dict[str, int | bool | dict | None]
-        product: dict
+        product: dict[str, dict]
         id_, product = product_price["vendor-products"].popitem()
-        product_attrs: dict = product.get("vendor-product-attrs", {})
-        if product_attrs:
-            product_attrs = {
-                attr["attr"]: attr["value"] for attr in product_attrs.values()
-            }
-        product_attrs |= {
+        # product_attrs = product.get("vendor-product-attrs", {})
+        # if product_attrs:
+        #     product_attrs = {
+        #         attr["attr"]: attr["value"] for attr in product_attrs.values()
+        #     }
+        product_attrs = {
             "model_number": product["vendor-product-identifier"],
             "description": product["vendor-product-description"],
             "price": product_price["price"],
             "effective_date": product_price["effective-date"],
         }
+        product_attrs.setdefault("attrs", {})
+        customer_specific = "vendor-pricing-by-customer-attrs"
+        if pricing_by_customer_attrs := product_price.get(customer_specific):
+            product_attrs["attrs"] = {
+                attr["attr"]: attr["value"]
+                for attr in pricing_by_customer_attrs.values()
+            }
+
         if product_price["use-as-override"]:
             result.update({id_: product_attrs})
         else:
@@ -203,8 +213,6 @@ RATINGS = ADP_RESOURCE + "/adp-program-ratings"
 MODEL_LOOKUP = ADP_RESOURCE + "/model-lookup"
 ADP_FILE_DOWNLOAD_LINK = ADP_RESOURCE + "/programs/{customer_id}/download?stage={stage}"
 
-# V2
-
 VERIFY = configs.getboolean("SSL", "verify")
 
 if VERIFY:
@@ -244,38 +252,6 @@ class UploadError(Exception):
     """Exception for an error in uploading a file"""
 
 
-def get_product_from_api(
-    product_type: ADPProductClasses, customer: VendorCustomer
-) -> dict:
-    product_url = (
-        BACKEND_URL + f"/v2/vendors/{customer.vendor.id}/vendor-customers/{customer.id}"
-    )
-    includes = [
-        "vendor-pricing-by-customer.vendor-products.vendor-product-attrs",
-        "vendor-pricing-by-customer.vendor-products.vendor-product-to-class-mapping"
-        ".vendor-product-classes",
-    ]
-    include = "include=" + ",".join(incl for incl in includes)
-    filters = {
-        "filter_vendor_product_classes__name": [product_type.value["name"]],
-        "filter_vendor_product_classes__rank": [product_type.value["rank"]],
-    }
-    filters_formatted = "&".join(
-        f"{k}={','.join(str(i) for i in v)}" for k, v in filters.items()
-    )
-    query_params = "&".join(j for j in (include, filters_formatted))
-    resp: r.Response = r_get(f"{product_url}?{query_params}")
-    data: dict = resp.json()
-    if not data.get("data"):
-        raise Exception(f"No {product_type}")
-
-    includes_pricing_by_customer = restructure_included(
-        data["included"], "vendor-pricing-by-customer"
-    )
-    pricing = restructure_pricing_by_customer(includes_pricing_by_customer)
-    return pricing
-
-
 def get_pricing_by_customer(for_customer: VendorCustomer) -> list[ProductPriceBasic]:
     customer_id = for_customer.id
     vendor_id = for_customer.vendor.id
@@ -286,6 +262,7 @@ def get_pricing_by_customer(for_customer: VendorCustomer) -> list[ProductPriceBa
             BACKEND_URL + f"/v2/vendors/{vendor_id}/vendor-customers/{customer_id}"
         )
         includes = "include=vendor-pricing-by-customer.vendor-products"
+        includes += ",vendor-pricing-by-customer.vendor-pricing-by-customer-attrs"
         resp: r.Response = r_get(f"{pricing_url}?{includes}")
         data: dict = resp.json()
         if not data.get("data"):
@@ -298,7 +275,15 @@ def get_pricing_by_customer(for_customer: VendorCustomer) -> list[ProductPriceBa
         LOCAL_STORAGE["pricing_by_customer"][customer_id] = pricing
 
     result = [ProductPriceBasic(id=id_, **attrs) for id_, attrs in pricing.items()]
-    result.sort(key=lambda p: p.model_number)
+    result.sort(
+        key=lambda p: (
+            int(p.attrs.get("sort_order", 999999)),
+            p.attrs.get("custom_description", ""),
+            (p.description if p.description else ""),
+            p.price,
+            p.model_number,
+        )
+    )
     return result
 
 
@@ -456,10 +441,6 @@ def post_new_coil(customer_id: int, model: str) -> r.Response:
 def post_new_ah(customer_id: int, model: str) -> r.Response:
     ahs = ADPProductClasses.AIR_HANDLERS
     data = post_new_product(customer_id=customer_id, model=model, class_1=ahs)
-    with open("debug.txt", "w") as f:
-        import json
-
-        f.write(json.dumps(data, indent=2))
     data["attributes"]["price"] = data["attributes"].pop("net-price")
     LOCAL_STORAGE["pricing_by_customer"][customer_id] |= {
         data["id"]: data["attributes"]
@@ -689,6 +670,7 @@ def post_new_product(
         model_lookup_content |= {"mpg": material_group}
         model_lookup_content |= {"net-price": net_price}
 
+        model_lookup_content["attrs"] = {"custom_description": default_description}
         product_result = dict(id=new_pricing_id, attributes=model_lookup_content)
     else:
         logger.info(f"\t{model} exists. Performing lookup.")
@@ -759,6 +741,7 @@ def post_new_product(
             url=BACKEND_URL + customer_price_attr_ep, json=dict(data=pl)
         )
         logger.info("\tCustom description established")
+        model_lookup_content["attrs"] = {"custom_description": default_description}
         product_result = dict(id=new_pricing_id, attributes=model_lookup_content)
 
     return product_result
