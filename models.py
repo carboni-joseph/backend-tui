@@ -127,9 +127,10 @@ class ProductPriceBasic(BaseModel):
     model_config = ConfigDict(populate_by_name=True, protected_namespaces={})
     id: int
     model_number: str = Field(alias="model-number")
-    description: Optional[str] = None
+    description: Optional[str] = ""
     price: int
     effective_date: datetime = Field(default=None, alias="effective-date")
+    attrs: dict[str, str]
 
     def model_post_init(self, __context) -> None:
         self.price = int(self.price / 100)
