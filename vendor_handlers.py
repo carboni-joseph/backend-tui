@@ -3,7 +3,7 @@ import logging
 from requests import Response
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Callable
-from models import ADPActions, Route, Palette
+from models import ADPActions, Route, Palette, ProductPriceBasic
 from actions import (
     download_file,
     price_check,
@@ -27,14 +27,14 @@ class VendorHandler(ABC):
         self.app: "Application" = app
 
     @abstractmethod
-    def get_action_flow(self) -> list[Route]:
+    def get_action_flow(self) -> Callable:
         pass
 
 
 class ADPHandler(VendorHandler):
     """ADP Management Flows"""
 
-    def get_action_flow(self):
+    def get_action_flow(self) -> Callable:
         return partial(
             self.app.menu,
             f"{self.app.vendor_customer.name}",
@@ -49,14 +49,14 @@ class ADPHandler(VendorHandler):
             [self.user_input, urwid.AttrMap(submit, None, focus_map="reversed")]
         )
 
-    def do_model_lookup(self):
+    def do_model_lookup(self) -> urwid.ListBox:
         self.user_input = urwid.Edit("Enter Model Number: ")
         submit = urwid.Button("Submit", on_press=self.display_price_check)
         return urwid.ListBox(
             [self.user_input, urwid.AttrMap(submit, None, focus_map="reversed")]
         )
 
-    def display_price_check(self, button):
+    def display_price_check(self, button) -> None:
         customer = self.app.vendor_customer
         user_input = self.user_input
         raw_input = user_input.edit_text
@@ -104,6 +104,7 @@ class ADPHandler(VendorHandler):
             response_body = urwid.Text(resp.content)
             self.app.frame.header = urwid.Pile([response_header, self.app.frame.header])
             self.app.frame.body = urwid.Filler(urwid.Pile([response_body]))
+        return
 
     def add_new_coil(self) -> urwid.ListBox:
         return self.add_new_model(partial(self.submit_model, post_new_coil))
@@ -141,8 +142,9 @@ class ADPHandler(VendorHandler):
             results.append(response_header)
         self.app.go_back().go_back()
         self.app.frame.header = urwid.Pile([*results, self.app.frame.header])
+        return
 
-    def upload_ratings(self, selected_file: str):
+    def upload_ratings(self, selected_file: str) -> None:
         customer = self.app.vendor_customer
         try:
             post_new_ratings(customer.id, selected_file)
@@ -154,6 +156,18 @@ class ADPHandler(VendorHandler):
             logging.info(f"ratings uploaded")
         finally:
             self.app.frame.header = urwid.Pile([header_text, self.app.frame.header])
+        return
+
+    def product_selected(self, product: ProductPriceBasic) -> Callable:
+
+        return partial(
+            self.app.menu,
+            title="Choose Attribute to Edit",
+            callback=self.app.go_back,
+            choices=product.attrs.values(),
+            as_table=True,
+            headers=["attr", "value"],
+        )
 
     def action_chosen(self, choice: str, button) -> None:
         """determine which administrative action
@@ -225,10 +239,8 @@ class ADPHandler(VendorHandler):
                         )
                         cats.add(category)
                     route = Route(
-                        # TODO SET UP THE NEXT MENUS
-                        callable_=None,
-                        callable_title="Select attribute to edit",
-                        choice_title=f"{p.id:05}   {p.model_number}",
+                        callable_=self.product_selected(p),
+                        choice_title=f"{p.id:05}   {p.model_number}   ${p.price:.02f}",
                     )
                     routes.append(route)
                 self.app.next_screen = partial(
@@ -244,6 +256,7 @@ class ADPHandler(VendorHandler):
                 response = "No Action taken"
                 response_text = urwid.Text(response)
                 self.app.frame.body = urwid.Filler(urwid.Pile([response_text]))
+        return
 
 
 class BerryHandler(VendorHandler):

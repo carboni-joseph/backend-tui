@@ -9,7 +9,7 @@ import logging
 
 set_up_token()
 from models import SCACustomer, SCACustomerV2, Vendor, VendorCustomer, Route, Palette
-from actions import get_vendors, get_sca_customers_w_vendor_accounts
+from actions import get_vendors, get_sca_customers_w_vendor_accounts, debug
 from models import TableHeader, TableRow, Route
 from vendor_handlers import HANDLERS
 
@@ -96,7 +96,7 @@ class Application:
         else:
             return menu_widget
 
-    def go_back(self, button=None) -> "Application":
+    def go_back(self, *args, button=None) -> "Application":
         self.frame.set_focus("body")
         try:
             header, self.frame.body = self.NAV_STACK.pop()
@@ -169,7 +169,8 @@ class Application:
         self.frame.header = urwid.AttrMap(urwid.Text(title), Palette.HEADER.value[0])
         body = [urwid.Divider()]
         if as_table:
-            body.append(TableHeader([" "] + headers))
+            # body.append(TableHeader([" "] + headers))
+            pass
         for c in choices:
             c: Annotated[str, Any]
             if label_attrs:

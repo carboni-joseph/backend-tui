@@ -129,6 +129,10 @@ class Attr(BaseModel):
     type_: str
     value: str
 
+    def model_post_init(self, __context):
+        self.attr = self.attr.replace("_", " ").title()
+        return super().model_post_init(__context)
+
 
 class ProductPriceBasic(BaseModel):
     model_config = ConfigDict(populate_by_name=True, protected_namespaces={})
@@ -318,8 +322,8 @@ class Ratings(BaseModel):
 @dataclass
 class Route:
     callable_: Callable
-    callable_title: str
     choice_title: str
+    callable_title: Optional[str] = None
     callable_choices: Iterable = None
     callable_label_attrs: list[str] = None
     callable_as_table: bool = (False,)
@@ -339,33 +343,43 @@ class TableRow(Columns):
     signals = ["click"]
 
     def __init__(
-        self, contents, selector_text=">", displayable_elements: tuple[str] = None
+        self,
+        contents: BaseModel | str,
+        selector_text=">",
+        displayable_elements: tuple[str] = None,
     ) -> None:
         self.selector_text = selector_text
         self.displayable = displayable_elements
-        self.selector = Text(selector_text, align="right")
+        self.selector = Text(selector_text, align="left")
         match contents:
-            case Coil() | AH() | Rating():
+            case Rating():
                 attrs = contents.attributes
-                if self.displayable:
-                    attrs_treated = [
-                        (attr, str(value))
-                        for attr, value in attrs
-                        if attr in self.displayable
-                    ]
-                else:
-                    attrs_treated = [(attr, str(value)) for attr, value in attrs]
-                cells = []
-                for attr in attrs_treated:
-                    name, value = attr
-                    cells.append(self.selective_coloring(value, "center"))
-                cells.insert(0, AttrMap(self.selector, "normal", "selector"))
-            case _:
-                cells = [Text(c, align="center") for c in contents]
-        super().__init__(cells, dividechars=1)
+                cells = self._extract_displayable(contents=attrs)
+            case Attr():
+                cells = self._extract_displayable(contents=contents)
+            case str():
+                cells = [Text(c, align="left") for c in contents]
+        cells = [("weight", 10, cell) for cell in cells]
+        cells.insert(0, ("fixed", 5, AttrMap(self.selector, "normal", "selector")))
+        super().__init__(cells, dividechars=3)
 
     def selectable(self) -> bool:
         return True
+
+    def _extract_displayable(self, contents) -> list[Widget]:
+        if self.displayable:
+            attrs_treated = [
+                (attr, str(value))
+                for attr, value in contents
+                if attr in self.displayable
+            ]
+        else:
+            attrs_treated = [(attr, str(value)) for attr, value in contents]
+        cells = []
+        for attr in attrs_treated:
+            name, value = attr
+            cells.append(self.selective_coloring(value, "left"))
+        return cells
 
     def keypress(self, size: KeypressSize, key: str) -> str | None:
         if key == "enter":
