@@ -184,7 +184,7 @@ class ADPHandler(VendorHandler):
             case ADPActions.UPLOAD_RATINGS:
                 file = select_file()
                 logging.info(f"uploading ratings from {file}")
-                self.upload_ratings()
+                self.upload_ratings(file)
             case ADPActions.PRODUCT:
                 logging.info(f"Getting products for {customer.name}...")
                 products = get_pricing_by_customer(customer)
@@ -210,9 +210,11 @@ class ADPHandler(VendorHandler):
                     )
                 )
                 cats = set()
-                offset = 0
-                for row, p in enumerate(products, start=9):
-                    category = p.attrs.get("custom_description", "")
+                for p in products:
+                    if category_obj := p.attrs.get("custom_description", None):
+                        category = category_obj.value
+                    else:
+                        category = ""
                     if category not in cats:
                         routes.append(urwid.Divider("-"))
                         routes.append(
@@ -222,12 +224,11 @@ class ADPHandler(VendorHandler):
                             )
                         )
                         cats.add(category)
-                        offset += 5
                     route = Route(
                         # TODO SET UP THE NEXT MENUS
                         callable_=None,
                         callable_title="Select attribute to edit",
-                        choice_title=f"{row+offset:03}   {p.model_number}",
+                        choice_title=f"{p.id:05}   {p.model_number}",
                     )
                     routes.append(route)
                 self.app.next_screen = partial(
