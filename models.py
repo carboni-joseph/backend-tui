@@ -123,6 +123,13 @@ class CoilAttrs(BaseModel):
     stage: str
 
 
+class Attr(BaseModel):
+    id: int
+    attr: str
+    type_: str
+    value: str
+
+
 class ProductPriceBasic(BaseModel):
     model_config = ConfigDict(populate_by_name=True, protected_namespaces={})
     id: int
@@ -130,7 +137,7 @@ class ProductPriceBasic(BaseModel):
     description: Optional[str] = ""
     price: int
     effective_date: datetime = Field(default=None, alias="effective-date")
-    attrs: dict[str, str]
+    attrs: dict[str, Attr]
 
     def model_post_init(self, __context) -> None:
         self.price = int(self.price / 100)
