@@ -23,6 +23,7 @@ from models import (
     RatingRels,
     Vendor,
     VendorCustomer,
+    Attr,
 )
 from auth import AuthToken
 
@@ -146,15 +147,18 @@ def restructure_pricing_by_customer(
     obj: dict[str, dict | str]
 ) -> dict[str, dict[str, str | dict[str | str]]]:
     result = dict()
-    for product_price in obj.values():
+    for id_, product_price in obj.items():
         product_price: dict[str, int | bool | dict | None]
         product: dict[str, dict]
-        id_, product = product_price["vendor-products"].popitem()
+        _, product = product_price["vendor-products"].popitem()
+
+        # TODO come back to this to just display features that may not be changed?
         # product_attrs = product.get("vendor-product-attrs", {})
         # if product_attrs:
         #     product_attrs = {
         #         attr["attr"]: attr["value"] for attr in product_attrs.values()
         #     }
+
         product_attrs = {
             "model_number": product["vendor-product-identifier"],
             "description": product["vendor-product-description"],
@@ -165,8 +169,13 @@ def restructure_pricing_by_customer(
         customer_specific = "vendor-pricing-by-customer-attrs"
         if pricing_by_customer_attrs := product_price.get(customer_specific):
             product_attrs["attrs"] = {
-                attr["attr"]: attr["value"]
-                for attr in pricing_by_customer_attrs.values()
+                attr["attr"]: {
+                    "id": id,
+                    "attr": attr["attr"],
+                    "type_": attr["type"],
+                    "value": attr["value"],
+                }
+                for id, attr in pricing_by_customer_attrs.items()
             }
 
         if product_price["use-as-override"]:
@@ -255,6 +264,8 @@ class UploadError(Exception):
 def get_pricing_by_customer(for_customer: VendorCustomer) -> list[ProductPriceBasic]:
     customer_id = for_customer.id
     vendor_id = for_customer.vendor.id
+    default_sort_attr = Attr(id=-1, attr="", type_="", value="999999")
+    default_desc_attr = Attr(id=-1, attr="", type_="", value="")
     if stored_pricing := LOCAL_STORAGE["pricing_by_customer"].get(customer_id):
         pricing = stored_pricing
     else:
@@ -277,8 +288,8 @@ def get_pricing_by_customer(for_customer: VendorCustomer) -> list[ProductPriceBa
     result = [ProductPriceBasic(id=id_, **attrs) for id_, attrs in pricing.items()]
     result.sort(
         key=lambda p: (
-            int(p.attrs.get("sort_order", 999999)),
-            p.attrs.get("custom_description", ""),
+            int(p.attrs.get("sort_order", default_sort_attr).value),
+            p.attrs.get("custom_description", default_desc_attr).value,
             (p.description if p.description else ""),
             p.price,
             p.model_number,
