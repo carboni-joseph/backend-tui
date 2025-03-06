@@ -134,6 +134,12 @@ class Attr(BaseModel):
         return super().model_post_init(__context)
 
 
+class Price(BaseModel):
+    id: int
+    attr: str = "Price"
+    value: int
+
+
 class ProductPriceBasic(BaseModel):
     model_config = ConfigDict(populate_by_name=True, protected_namespaces={})
     id: int
@@ -355,7 +361,7 @@ class TableRow(Columns):
             case Rating():
                 attrs = contents.attributes
                 cells = self._extract_displayable(contents=attrs)
-            case Attr():
+            case Attr() | Price():
                 cells = self._extract_displayable(contents=contents)
             case str():
                 cells = [Text(c, align="left") for c in contents]
