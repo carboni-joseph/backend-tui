@@ -3,7 +3,7 @@ import logging
 from requests import Response
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Callable
-from models import ADPActions, Route, Palette, ProductPriceBasic
+from models import ADPActions, Route, Palette, ProductPriceBasic, Attr
 from actions import (
     download_file,
     price_check,
@@ -163,11 +163,18 @@ class ADPHandler(VendorHandler):
         return partial(
             self.app.menu,
             title="Choose Attribute to Edit",
-            callback=self.app.go_back,
+            callback=self.modify_customer_specific_product_attr,
             choices=product.attrs.values(),
             as_table=True,
             headers=["attr", "value"],
         )
+
+    def modify_customer_specific_product_attr(self, attr: Attr, button):
+        # TODO: it works for editing in place, but see if we can get this to
+        # persist the change client-side, then made sure a companion API request is
+        # sent
+
+        self.app.edit_last_column(self.app.frame.body.base_widget)
 
     def action_chosen(self, choice: str, button) -> None:
         """determine which administrative action

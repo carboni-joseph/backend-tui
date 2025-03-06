@@ -294,6 +294,51 @@ class Application:
             self.next_screen = handler.get_action_flow()
             handler.app.show_new_screen()
 
+    def edit_last_column(self, listbox: urwid.ListBox):
+        # Get the index of the selected row
+        selected_index: int | None = listbox.get_focus()[1]
+        if selected_index is None:
+            return  # No row is selected
+
+        # Get the current TableRow widget
+        row: urwid.Widget = listbox[selected_index]
+
+        # Extract the current contents (excluding the selector)
+        contents = row.contents[1:]  # Skip the selector (index 0)
+        if not contents:
+            return  # No data columns to edit
+
+        # Get the text from the last column
+        last_widget, _ = contents[-1]
+        if isinstance(last_widget, urwid.Edit):
+            # Finish editing: Replace Edit with Text
+            new_text = last_widget.get_edit_text()
+            text_widget = TableRow.selective_coloring(new_text, "center")
+            new_contents = row.contents[:-1] + [(text_widget, row.contents[-1][1])]
+            row.contents = new_contents
+        else:
+            try:
+                last_text, _ = last_widget.get_text()
+                if isinstance(last_text, tuple):
+                    last_text = last_text[0]  # Extract the text if it's a styled tuple
+            except:
+                last_text = ""  # Default to empty if extraction fails
+
+            # Replace the last column with an Edit widget pre-filled with the current value
+            edit_widget = urwid.Edit(caption="", edit_text=str(last_text))
+            new_contents = row.contents[:-1] + [(edit_widget, row.contents[-1][1])]
+            row.contents = new_contents
+
+        # Update the listbox and re-render
+        walker: urwid.SimpleFocusListWalker = listbox.body
+        walker[selected_index] = row
+        walker._modified()  # Notify the listbox that the content has changed
+        try:
+            row.set_focus(2)
+        except:
+            pass
+        return
+
 
 if __name__ == "__main__":
     app = Application()
