@@ -1,4 +1,5 @@
 import urwid
+from urwid.widget.frame import HeaderWidget, BodyWidget
 from functools import partial
 from typing import Callable, Annotated, Any, Iterable
 from os.path import dirname, abspath
@@ -8,9 +9,22 @@ from auth import set_up_token
 import logging
 
 set_up_token()
-from models import SCACustomer, SCACustomerV2, Vendor, VendorCustomer, Route, Palette
-from actions import get_vendors, get_sca_customers_w_vendor_accounts, debug
-from models import TableHeader, TableRow, Route
+from models import (
+    SCACustomer,
+    SCACustomerV2,
+    Vendor,
+    VendorCustomer,
+    Route,
+    Palette,
+    Attr,
+    Price,
+)
+from actions import (
+    get_vendors,
+    get_sca_customers_w_vendor_accounts,
+    LOCAL_STORAGE,
+)
+from models import TableHeader, TableRow, Route, ProductPriceBasic, Attr
 from vendor_handlers import HANDLERS
 
 FILE_DIR = Path(dirname(abspath(__file__)))
@@ -39,8 +53,9 @@ class Application:
         self.vendor_customer: VendorCustomer = None
         self.user_input: urwid.Edit = None
         self.next_screen: Callable = self.top_menu
-        self.NAV_STACK = []
+        self.NAV_STACK: list[tuple[HeaderWidget, BodyWidget]] = []
         self.WELCOME_SCREEN = True
+        self.edit_mode = False
 
         # footer buttons
         back_to_top = urwid.Button("Main Menu")
@@ -286,55 +301,111 @@ class Application:
         )
         self.show_new_screen()
 
+    def product_selected(self, product: ProductPriceBasic) -> Callable:
+
+        choices: list[Attr | Price] = list(product.attrs.values())
+        choices.append(Price(id=product.id, value=product.price))
+
+        return partial(
+            self.menu,
+            title="Choose Attribute to Edit",
+            callback=self.modify_customer_specific_product_attr,
+            choices=choices,
+            as_table=True,
+            headers=["attr", "value"],
+        )
+
+    def modify_customer_specific_product_attr(self, attr: Attr | Price, button) -> None:
+        self.edit_last_column(self.frame.body.base_widget, attr=attr)
+
     def customer_account_chosen(self, chosen_customer: VendorCustomer, button) -> None:
         """Delegate from here to the vendor-specific handlers"""
         self.vendor_customer = chosen_customer
         if Handler := HANDLERS.get(chosen_customer.vendor.id):
-            handler = Handler(self)
-            self.next_screen = handler.get_action_flow()
-            handler.app.show_new_screen()
+            self.handler = Handler(self)
+            self.next_screen = self.handler.get_action_flow()
+            self.handler.app.show_new_screen()
 
-    def edit_last_column(self, listbox: urwid.ListBox):
-        # Get the index of the selected row
-        selected_index: int | None = listbox.get_focus()[1]
-        if selected_index is None:
-            return  # No row is selected
+    def edit_last_column(self, listbox: urwid.ListBox, **kwargs):
+        focus_widget: TableRow = listbox.focus
+        focus_position: int = listbox.focus_position
 
-        # Get the current TableRow widget
-        row: urwid.Widget = listbox[selected_index]
-
-        # Extract the current contents (excluding the selector)
-        contents = row.contents[1:]  # Skip the selector (index 0)
-        if not contents:
-            return  # No data columns to edit
+        contents: list[tuple] = focus_widget.contents[1:]  # Skip the selector
 
         # Get the text from the last column
         last_widget, _ = contents[-1]
-        if isinstance(last_widget, urwid.Edit):
-            # Finish editing: Replace Edit with Text
-            new_text = last_widget.get_edit_text()
-            text_widget = TableRow.selective_coloring(new_text, "center")
-            new_contents = row.contents[:-1] + [(text_widget, row.contents[-1][1])]
-            row.contents = new_contents
-        else:
-            try:
-                last_text, _ = last_widget.get_text()
-                if isinstance(last_text, tuple):
-                    last_text = last_text[0]  # Extract the text if it's a styled tuple
-            except:
-                last_text = ""  # Default to empty if extraction fails
+        match last_widget:
+            case urwid.Edit() | urwid.IntEdit():
+                new_text = last_widget.get_edit_text()
+                text_widget = TableRow.selective_coloring(new_text, "left")
+                new_contents = focus_widget.contents[:-1] + [
+                    (text_widget, focus_widget.contents[-1][1])
+                ]
+                focus_widget.contents = new_contents
 
-            # Replace the last column with an Edit widget pre-filled with the current value
-            edit_widget = urwid.Edit(caption="", edit_text=str(last_text))
-            new_contents = row.contents[:-1] + [(edit_widget, row.contents[-1][1])]
-            row.contents = new_contents
+                prior_screen_body: urwid.ListBox = self.NAV_STACK[-1][-1]
+                prior_screen_list = prior_screen_body.base_widget
+                prior_focus: urwid.Button = prior_screen_list.focus.base_widget
+                # prior_focus.set_label()
+                passed_in_attr = kwargs.get("attr")
+                match passed_in_attr:
+                    case Attr():
+                        # TODO IMPLEMENT LOGIC FOR AN API CALL TO PERSIST THE CHANGE
+                        # IN THE BACKEND
+                        attr_modified: Attr = passed_in_attr
+                        attr_modified.value = new_text
+                        customers_pricing = LOCAL_STORAGE["pricing_by_customer"][
+                            self.vendor_customer.id
+                        ]
+                        for product in customers_pricing.values():
+                            if not product.get("attrs"):
+                                continue
+                            for attr in product["attrs"].values():
+                                if attr["id"] == attr_modified.id:
+                                    attr["value"] = new_text
+                                    break
+                    case Price():
+                        # TODO IMPLEMENT LOGIC FOR AN API CALL TO PERSIST THE CHANGE
+                        # IN THE BACKEND
+                        attr_modified: Price = passed_in_attr
+                        attr_modified.value = int(new_text)
+                        customers_pricing = LOCAL_STORAGE["pricing_by_customer"][
+                            self.vendor_customer.id
+                        ]
+                        for price_id, product in customers_pricing.items():
+                            if price_id == attr_modified.id:
+                                product["price"] = attr_modified.value * 100
+                                break
+
+                prior_focus._invalidate()
+                self.edit_mode = False
+            case urwid.Text():
+                last_widget: urwid.Text
+                try:
+                    last_text, _ = last_widget.get_text()
+                    if isinstance(last_text, tuple):
+                        last_text = last_text[0]
+                except:
+                    last_text = ""
+
+                try:
+                    last_text = int(last_text)
+                    edit_widget = urwid.IntEdit(caption="", default=last_text)
+                except:
+                    edit_widget = urwid.Edit(caption="", edit_text=str(last_text))
+                # Replace the last column with an Edit widget pre-filled with the current value
+                new_contents = focus_widget.contents[:-1] + [
+                    (edit_widget, focus_widget.contents[-1][1])
+                ]
+                focus_widget.contents = new_contents
+                self.edit_mode = True
 
         # Update the listbox and re-render
         walker: urwid.SimpleFocusListWalker = listbox.body
-        walker[selected_index] = row
-        walker._modified()  # Notify the listbox that the content has changed
+        walker[focus_position] = focus_widget
+        walker._modified()
         try:
-            row.set_focus(2)
+            focus_widget.set_focus(2)
         except:
             pass
         return
