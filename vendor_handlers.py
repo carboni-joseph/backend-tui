@@ -158,24 +158,6 @@ class ADPHandler(VendorHandler):
             self.app.frame.header = urwid.Pile([header_text, self.app.frame.header])
         return
 
-    def product_selected(self, product: ProductPriceBasic) -> Callable:
-
-        return partial(
-            self.app.menu,
-            title="Choose Attribute to Edit",
-            callback=self.modify_customer_specific_product_attr,
-            choices=product.attrs.values(),
-            as_table=True,
-            headers=["attr", "value"],
-        )
-
-    def modify_customer_specific_product_attr(self, attr: Attr, button):
-        # TODO: it works for editing in place, but see if we can get this to
-        # persist the change client-side, then made sure a companion API request is
-        # sent
-
-        self.app.edit_last_column(self.app.frame.body.base_widget)
-
     def action_chosen(self, choice: str, button) -> None:
         """determine which administrative action
         the user chose and route them to the proper next menu"""
@@ -246,7 +228,7 @@ class ADPHandler(VendorHandler):
                         )
                         cats.add(category)
                     route = Route(
-                        callable_=self.product_selected(p),
+                        callable_=self.app.product_selected(p),
                         choice_title=f"{p.id:05}   {p.model_number}   ${p.price:.02f}",
                     )
                     routes.append(route)
