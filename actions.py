@@ -7,9 +7,8 @@ import configparser
 from pydantic import BaseModel
 from pathlib import Path
 from datetime import datetime
-from dataclasses import dataclass
 from enum import StrEnum, Enum
-from typing import Callable, Any
+from typing import Callable, Any, Optional
 from collections import defaultdict
 import concurrent.futures as futures
 from functools import partial, wraps
@@ -68,15 +67,20 @@ class ADPProductClasses(Enum):
     AIR_HANDLERS = {"name": "Air Handlers", "rank": 1}
 
 
-@dataclass
-class NewProductDetails:
+class FuturePrice(BaseModel):
+    effective_date: datetime
+    future_price: int
+
+
+class NewProductDetails(BaseModel):
     id: int
+    effective_date: datetime
     zero_discount_price: int
-    material_group_discount: float
-    material_group_net_price: int
-    snp_discount: float
-    snp_price: int
-    net_price: int
+    material_group_discount: Optional[float] = None
+    material_group_net_price: Optional[int] = None
+    snp_discount: Optional[float] = None
+    snp_price: Optional[int] = None
+    net_price: Optional[int] = None
     model_returned: str
     category: str
     model_lookup_obj: dict
@@ -148,7 +152,7 @@ def restructure_pricing_by_class(obj: dict) -> dict:
 
 
 def restructure_pricing_by_customer(
-    obj: dict[str, dict | str]
+    obj: dict[str, dict | str],
 ) -> dict[str, dict[str, str | dict[str | str]]]:
     result = dict()
     for id_, product_price in obj.items():
@@ -224,7 +228,10 @@ BACKEND_URL = configs["ENDPOINTS"]["backend_url"]
 ADP_RESOURCE = BACKEND_URL + "/vendors/adp"
 RATINGS = ADP_RESOURCE + "/adp-program-ratings"
 MODEL_LOOKUP = ADP_RESOURCE + "/model-lookup"
-ADP_FILE_DOWNLOAD_LINK = ADP_RESOURCE + "/programs/{customer_id}/download?stage={stage}"
+ADP_FILE_DOWNLOAD_LINK = (
+    BACKEND_URL
+    + "/v2/vendors/adp/vendor-customers/{customer_id}/pricing?return_type=xlsx"
+)
 
 VERIFY = configs.getboolean("SSL", "verify")
 
@@ -399,13 +406,14 @@ def get_sca_customers_w_vendor_accounts(vendor: Vendor) -> list[SCACustomerV2]:
 
 
 def request_dl_link(customer_id: int, stage: Stage) -> str:
-    url = ADP_FILE_DOWNLOAD_LINK.format(customer_id=customer_id, stage=stage.value)
-    resp: r.Response = r_post(url=url)
+    url = ADP_FILE_DOWNLOAD_LINK.format(customer_id=customer_id)
+    resp: r.Response = r_get(url=url)
     if not resp.status_code == 200:
         raise Exception(
-            "Unable to obtain download link.\n" f"Message: {resp.content.decode()}"
+            f"Unable to obtain download link from {url}.\n"
+            f"Message: {resp.content.decode()}"
         )
-    return resp.json()["downloadLink"]
+    return resp.json()["download_link"]
 
 
 def download_file(customer_id: str) -> None:
@@ -475,6 +483,7 @@ def new_product_setup(
     material_group = model_lookup_content.pop("mpg")
 
     # for now, just popping to remove them from the object
+    effective_date = model_lookup_content.pop("effective-date")
     model_returned = model_lookup_content.pop("model-number")
     zero_discount_price = model_lookup_content.pop("zero-discount-price")
     material_group_discount = model_lookup_content.pop("material-group-discount", None)
@@ -578,6 +587,7 @@ def new_product_setup(
 
     return NewProductDetails(
         id=new_product_id,
+        effective_date=effective_date,
         zero_discount_price=zero_discount_price,
         material_group_discount=material_group_discount,
         material_group_net_price=material_group_net_price,
@@ -613,8 +623,10 @@ def post_new_product(
     if product_check_resp.status_code == 204:
         logger.info(f"\t{model} needs to be built")
         new_product_details = new_product_setup(customer_id, model, class_1)
+
         logger.info(f"\t{model} has been setup")
         new_product_id = new_product_details.id
+        effective_date = new_product_details.effective_date
         zero_discount_price = new_product_details.zero_discount_price
         material_group_discount = new_product_details.material_group_discount
         material_group_net_price = new_product_details.material_group_net_price
@@ -633,7 +645,7 @@ def post_new_product(
             "attributes": {
                 "use-as-override": True,
                 "price": net_price * 100,
-                "effective-date": str(datetime.now()),
+                "effective-date": str(effective_date),
             },
             "relationships": {
                 "vendor-products": {
@@ -714,6 +726,10 @@ def post_new_product(
         material_group = model_lookup_content.get("mpg")
         net_price = int(model_lookup_content.get("net-price"))
         default_description = model_lookup_content.get("category")
+        effective_date = datetime.strptime(
+            model_lookup_content.get("effective-date").split(".")[0],
+            "%Y-%m-%dT%H:%M:%S",
+        )
 
         # map product to customer with price
 
@@ -723,7 +739,7 @@ def post_new_product(
             "attributes": {
                 "use-as-override": True,
                 "price": net_price * 100,
-                "effective-date": str(datetime.now()),
+                "effective-date": str(effective_date),
             },
             "relationships": {
                 "vendor-products": {
@@ -774,6 +790,49 @@ def post_new_product(
             }
         }
         product_result = dict(id=new_pricing_id, attributes=model_lookup_content)
+
+    model_lookup_query_future = (
+        f"?model_num={model}&customer_id={customer_id}&future=true"
+    )
+    future_price_resp: r.Response = r_get(url=MODEL_LOOKUP + model_lookup_query_future)
+    future_price_json = future_price_resp.json()
+    future_price = FuturePrice(
+        effective_date=future_price_json["effective-date"],
+        future_price=future_price_json["net-price"],
+    )
+    future_price_eff_date = future_price.effective_date
+    setup_future_price_record = False
+    if (
+        future_price_eff_date > effective_date
+        and future_price_eff_date > datetime.today()
+    ):
+        setup_future_price_record = True
+        future_price_fig = future_price.future_price
+
+    if setup_future_price_record:
+        new_price_pl = {
+            "type": "vendor-pricing-by-customer-future",
+            "attributes": {
+                "price": int(future_price_fig * 100),
+                "effective-date": str(future_price_eff_date),
+            },
+            "relationships": {
+                "vendor-pricing-by-customer": {
+                    "data": {"type": "vendor-pricing-by-customer", "id": new_pricing_id}
+                },
+                "vendors": {"data": {"type": "vendors", "id": "adp"}},
+            },
+        }
+        customer_pricing_future = "/v2/vendors/vendor-pricing-by-customer-future"
+        resp: r.Response = r_post(
+            url=BACKEND_URL + customer_pricing_future, json=dict(data=new_price_pl)
+        )
+        if resp.status_code == 200:
+            logger.info(
+                f"\tFuture Pricing set with effective date: {future_price_eff_date}"
+            )
+        else:
+            logger.error(f"failed to set future price")
 
     return product_result
 
