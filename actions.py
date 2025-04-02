@@ -227,10 +227,10 @@ BACKEND_URL = configs["ENDPOINTS"]["backend_url"]
 
 ADP_RESOURCE = BACKEND_URL + "/vendors/adp"
 RATINGS = ADP_RESOURCE + "/adp-program-ratings"
-MODEL_LOOKUP = ADP_RESOURCE + "/model-lookup"
+MODEL_LOOKUP = BACKEND_URL + "/vendors/model-lookup/adp"
 ADP_FILE_DOWNLOAD_LINK = (
     BACKEND_URL
-    + "/v2/vendors/adp/vendor-customers/{customer_id}/pricing?return_type=xlsx"
+    + "/v2/vendors/adp/vendor-customers/{customer_id}/pricing?return_type=xlsx&effective_date={effective_date}"
 )
 
 VERIFY = configs.getboolean("SSL", "verify")
@@ -406,7 +406,10 @@ def get_sca_customers_w_vendor_accounts(vendor: Vendor) -> list[SCACustomerV2]:
 
 
 def request_dl_link(customer_id: int, stage: Stage) -> str:
-    url = ADP_FILE_DOWNLOAD_LINK.format(customer_id=customer_id)
+    effective_date = datetime.today().date()
+    url = ADP_FILE_DOWNLOAD_LINK.format(
+        customer_id=customer_id, effective_date=effective_date
+    )
     resp: r.Response = r_get(url=url)
     if not resp.status_code == 200:
         raise Exception(
@@ -438,7 +441,7 @@ def download_file(customer_id: str) -> None:
 
 def price_check(customer_id: int, model: str, *args, **kwargs) -> r.Response:
     year = kwargs.get("BASE_YEAR", 2025)
-    query = f"?model_num={model}&customer_id={customer_id}&price_year={year}"
+    query = f"?model_number={model}&customer_id={customer_id}&price_year={year}"
     return r_get(url=MODEL_LOOKUP + query)
 
 
@@ -454,7 +457,7 @@ def custom_response(data: dict) -> r.Response:
 def post_new_coil(customer_id: int, model: str) -> r.Response:
     coils = ADPProductClasses.COILS
     data = post_new_product(customer_id=customer_id, model=model, class_1=coils)
-    data["attributes"]["price"] = data["attributes"].pop("net-price")
+    data["attributes"]["price"] = data["attributes"].pop("net_price")
     LOCAL_STORAGE["pricing_by_customer"][customer_id] |= {
         data["id"]: data["attributes"]
     }
@@ -464,7 +467,7 @@ def post_new_coil(customer_id: int, model: str) -> r.Response:
 def post_new_ah(customer_id: int, model: str) -> r.Response:
     ahs = ADPProductClasses.AIR_HANDLERS
     data = post_new_product(customer_id=customer_id, model=model, class_1=ahs)
-    data["attributes"]["price"] = data["attributes"].pop("net-price")
+    data["attributes"]["price"] = data["attributes"].pop("net_price")
     LOCAL_STORAGE["pricing_by_customer"][customer_id] |= {
         data["id"]: data["attributes"]
     }
@@ -477,22 +480,22 @@ def new_product_setup(
 
     # look up model
     logger.info("\tLooking up model details")
-    model_lookup_query = f"?model_num={model}&customer_id={customer_id}"
+    model_lookup_query = f"?model_number={model}&customer_id={customer_id}"
     model_lookup_resp: r.Response = r_get(url=MODEL_LOOKUP + model_lookup_query)
     model_lookup_content: dict = model_lookup_resp.json()
     material_group = model_lookup_content.pop("mpg")
 
     # for now, just popping to remove them from the object
-    effective_date = model_lookup_content.pop("effective-date")
-    model_returned = model_lookup_content.pop("model-number")
-    zero_discount_price = model_lookup_content.pop("zero-discount-price")
-    material_group_discount = model_lookup_content.pop("material-group-discount", None)
+    effective_date = model_lookup_content.pop("effective_date")
+    model_returned = model_lookup_content.pop("model_number")
+    zero_discount_price = model_lookup_content.pop("zero_discount_price")
+    material_group_discount = model_lookup_content.pop("material_group_discount", None)
     material_group_net_price = model_lookup_content.pop(
-        "material-group-net-price", None
+        "material_group_net_price", None
     )
-    snp_discount = model_lookup_content.pop("snp-discount", None)
-    snp_net_price = model_lookup_content.pop("snp-net-price", None)
-    net_price = int(model_lookup_content.pop("net-price"))
+    snp_discount = model_lookup_content.pop("snp_discount", None)
+    snp_net_price = model_lookup_content.pop("snp_net_price", None)
+    net_price = int(model_lookup_content.pop("net_price"))
     default_description = model_lookup_content.pop("category")
 
     # register model, get id
@@ -620,7 +623,24 @@ def post_new_product(
 
     logger.info(f"\tChecking for existence.")
     product_check_resp: r.Response = r_get(url=BACKEND_URL + product_resource)
-    if product_check_resp.status_code == 204:
+    new_product = False
+    if product_check_resp.status_code == 200:
+        existing_product_data = product_check_resp.json()["data"]
+        if isinstance(existing_product_data, list):
+            filtered = [
+                e
+                for e in existing_product_data
+                if e["attributes"]["vendor-product-identifier"] == model
+            ]
+            if not filtered:
+                new_product = True
+            else:
+                new_product = False
+                existing_product_id = filtered.pop()["id"]
+        else:
+            existing_product_id = existing_product_data["id"]
+    if product_check_resp.status_code == 204 or new_product:
+        new_product = True
         logger.info(f"\t{model} needs to be built")
         new_product_details = new_product_setup(customer_id, model, class_1)
 
@@ -688,15 +708,15 @@ def post_new_product(
         new_attr = resp.json()
         logger.info("\tCustom description established")
         # add these back in for the return object
-        model_lookup_content |= {"zero-discount-price": zero_discount_price}
-        model_lookup_content |= {"material-group-discount": material_group_discount}
-        model_lookup_content |= {"material-group-net-price": material_group_net_price}
-        model_lookup_content |= {"snp-discount": snp_discount}
-        model_lookup_content |= {"snp-net-price": snp_net_price}
-        model_lookup_content |= {"model-returned": model_returned}
-        model_lookup_content |= {"model-number": model_returned}
+        model_lookup_content |= {"zero_discount_price": zero_discount_price}
+        model_lookup_content |= {"material_group_discount": material_group_discount}
+        model_lookup_content |= {"material_group_net_price": material_group_net_price}
+        model_lookup_content |= {"snp_discount": snp_discount}
+        model_lookup_content |= {"snp_net_price": snp_net_price}
+        model_lookup_content |= {"model_returned": model_returned}
+        model_lookup_content |= {"model_number": model_returned}
         model_lookup_content |= {"mpg": material_group}
-        model_lookup_content |= {"net-price": net_price}
+        model_lookup_content |= {"net_price": net_price}
 
         model_lookup_content["attrs"] = {
             "custom_description": {
@@ -708,26 +728,14 @@ def post_new_product(
         }
         product_result = dict(id=new_pricing_id, attributes=model_lookup_content)
     else:
-        logger.info(f"\t{model} exists. Performing lookup.")
-        existing_product_data = product_check_resp.json()["data"]
-        if isinstance(existing_product_data, list):
-            filtered = [
-                e
-                for e in existing_product_data
-                if e["attributes"]["vendor-product-identifier"] == model
-            ]
-            existing_product_id = filtered.pop()["id"]
-        else:
-            existing_product_id = existing_product_data["id"]
-
-        model_lookup_query = f"?model_num={model}&customer_id={customer_id}"
+        model_lookup_query = f"?model_number={model}&customer_id={customer_id}"
         model_lookup_resp: r.Response = r_get(url=MODEL_LOOKUP + model_lookup_query)
         model_lookup_content: dict = model_lookup_resp.json()
         material_group = model_lookup_content.get("mpg")
-        net_price = int(model_lookup_content.get("net-price"))
+        net_price = int(model_lookup_content.get("net_price"))
         default_description = model_lookup_content.get("category")
         effective_date = datetime.strptime(
-            model_lookup_content.get("effective-date").split(".")[0],
+            model_lookup_content.get("effective_date").split(".")[0],
             "%Y-%m-%dT%H:%M:%S",
         )
 
@@ -792,13 +800,13 @@ def post_new_product(
         product_result = dict(id=new_pricing_id, attributes=model_lookup_content)
 
     model_lookup_query_future = (
-        f"?model_num={model}&customer_id={customer_id}&future=true"
+        f"?model_number={model}&customer_id={customer_id}&future=true"
     )
     future_price_resp: r.Response = r_get(url=MODEL_LOOKUP + model_lookup_query_future)
     future_price_json = future_price_resp.json()
     future_price = FuturePrice(
-        effective_date=future_price_json["effective-date"],
-        future_price=future_price_json["net-price"],
+        effective_date=future_price_json["effective_date"],
+        future_price=future_price_json["net_price"],
     )
     future_price_eff_date = future_price.effective_date
     setup_future_price_record = False
@@ -843,7 +851,7 @@ def post_new_ratings(customer_id: int, file: str) -> None:
     with open(file, "rb") as fh:
         file_data = fh.read()
     resp: r.Response = r_post(
-        url=BACKEND_URL + f"/vendors/adp/adp-program-ratings/{customer_id}",
+        url=BACKEND_URL + f"/vendors/admin/adp/ratings/{customer_id}",
         files={
             "ratings_file": (
                 file,
