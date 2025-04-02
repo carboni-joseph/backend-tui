@@ -63,24 +63,24 @@ class ADPHandler(VendorHandler):
         resp: Response = price_check(customer.id, raw_input)
         if resp.status_code == 200:
             body: dict = resp.json()
-            zero_disc_price = body["zero-discount-price"]
-            net_price = body["net-price"]
+            zero_disc_price = body["zero_discount_price"]
+            net_price = body["net_price"]
             discount_used = 0
             if net_price != zero_disc_price:
-                mgd = body.get("material-group-net-price", 0)
-                snp = body.get("snp-price", 0)
+                mgd = body.get("material_group_net_price", 0)
+                snp = body.get("snp_price", 0)
                 if mgd == net_price:
-                    discount_used = body.get("material-group-discount")
+                    discount_used = body.get("material_group_discount")
                 if snp == net_price:
-                    discount_used = body.get("snp-discount")
-            net_price = f"Pricing\n   Price:  ${body['net-price']:,.2f}\n   Discount: {discount_used:0.2f}%"
+                    discount_used = body.get("snp_discount")
+            net_price = f"Pricing\n   Price:  ${body['net_price']:,.2f}\n   Discount: {discount_used:0.2f}%"
             orig_price = f"   ZDP:  ${zero_disc_price:,.2f}\n"
             features = [
                 f"   {k}: {v}"
                 for k, v in body.items()
                 if k
                 in [
-                    "model-number",
+                    "model_number",
                     "series",
                     "tonnage",
                     "width",
