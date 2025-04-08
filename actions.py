@@ -483,11 +483,16 @@ def new_product_setup(
     model_lookup_query = f"?model_number={model}&customer_id={customer_id}"
     model_lookup_resp: r.Response = r_get(url=MODEL_LOOKUP + model_lookup_query)
     model_lookup_content: dict = model_lookup_resp.json()
-    material_group = model_lookup_content.pop("mpg")
 
-    # for now, just popping to remove them from the object
+    ## remove anything not considered an arbitrary attribute
+    # product class
+    material_group = model_lookup_content.pop("mpg")
+    # obviously
     effective_date = model_lookup_content.pop("effective_date")
+    # primary product attributes
     model_returned = model_lookup_content.pop("model_number")
+    default_description = model_lookup_content.pop("category")
+    # pricing & discounts
     zero_discount_price = model_lookup_content.pop("zero_discount_price")
     material_group_discount = model_lookup_content.pop("material_group_discount", None)
     material_group_net_price = model_lookup_content.pop(
@@ -496,29 +501,9 @@ def new_product_setup(
     snp_discount = model_lookup_content.pop("snp_discount", None)
     snp_net_price = model_lookup_content.pop("snp_net_price", None)
     net_price = int(model_lookup_content.pop("net_price"))
-    default_description = model_lookup_content.pop("category")
 
-    # register model, get id
-    new_product_route = "/v2/vendors/vendor-products"
-    pl = {
-        "type": "vendor-products",
-        "attributes": {
-            "vendor-product-identifier": model,
-            "vendor-product-description": default_description,
-        },
-        "relationships": {
-            "vendors": {"data": {"type": "vendors", "id": "adp"}},
-        },
-    }
-    new_product_resp: r.Response = r_post(
-        url=BACKEND_URL + new_product_route, json=dict(data=pl)
-    )
-    logger.info("\tProduct parent record with model and description registered")
-    new_product_data = new_product_resp.json()["data"]
-    new_product_id = int(new_product_data["id"])
-
-    # associate stable product attributes to product
-    payloads = []
+    # set up custom attr objects for the payload
+    attrs = []
     logger.info("\tSetting up attributes")
     for attr, value in model_lookup_content.items():
         attr: str
@@ -529,32 +514,32 @@ def new_product_setup(
         else:
             val_type = "NUMBER"
 
-        pl = {
-            "type": "vendor-product-attrs",
-            "attributes": {
-                "attr": attr.replace("-", "_"),
-                "type": val_type,
-                "value": str(value),
-            },
-            "relationships": {
-                "vendor-products": {
-                    "data": {"type": "vendor-products", "id": new_product_id}
-                },
-                "vendors": {"data": {"type": "vendors", "id": "adp"}},
-            },
+        attr = {
+            "attr": attr.replace("-", "_"),
+            "type": val_type,
+            "value": str(value),
         }
-        payloads.append(pl)
-
-    new_product_attr_route = "/v2/vendors/vendor-product-attrs"
-
-    def post_attribute(payload: dict) -> None:
-        attr, value = payload["attributes"]["attr"], payload["attributes"]["value"]
-        r_post(url=BACKEND_URL + new_product_attr_route, json=dict(data=payload))
-        logger.info(f"\t  * {attr} = {value}")
-
-    with futures.ThreadPoolExecutor() as executor:
-        futures_ = [executor.submit(post_attribute, payload) for payload in payloads]
-        futures.wait(futures_)
+        attrs.append(attr)
+    # register model
+    new_product_route = "/v2/vendors/vendor-products"
+    pl = {
+        "type": "vendor-products",
+        "attributes": {
+            "vendor-product-identifier": model,
+            "vendor-product-description": default_description,
+            "vendor-product-attrs": attrs,
+        },
+        "relationships": {
+            "vendors": {"data": {"type": "vendors", "id": "adp"}},
+        },
+    }
+    new_product_resp: r.Response = r_post(
+        url=BACKEND_URL + new_product_route, json=dict(data=pl)
+    )
+    new_product_data = new_product_resp.json()["data"]
+    logger.info("\tProduct parent record with model and description registered")
+    logger.info("\tProduct attributes registered to the product")
+    new_product_id = int(new_product_data["id"])
 
     # map model to its product classes
     for cl in [material_group, class_1.value["name"]]:
