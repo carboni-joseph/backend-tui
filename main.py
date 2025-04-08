@@ -136,6 +136,8 @@ class Application:
                 self.frame.focus_position = "footer"
             else:
                 self.frame.focus_position = "body"
+        elif key == "backspace":
+            self.go_back()
 
     def welcome_screen(self) -> urwid.Filler:
         msg = f"""Welcome to the SCA Data Administration Program \n\n
