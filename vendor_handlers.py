@@ -73,7 +73,9 @@ class ADPHandler(VendorHandler):
                     discount_used = body.get("material_group_discount")
                 if snp == net_price:
                     discount_used = body.get("snp_discount")
-            net_price = f"Pricing\n   Price:  ${body['net_price']:,.2f}\n   Discount: {discount_used:0.2f}%"
+                if discount_used > 1:
+                    discount_used /= 100
+            net_price = f"Pricing\n   Price:  ${body['net_price']:,.2f}\n   Discount: {discount_used*100:0.2f}%"
             orig_price = f"   ZDP:  ${zero_disc_price:,.2f}\n"
             features = [
                 f"   {k}: {v}"
