@@ -440,7 +440,7 @@ def download_file(customer_id: str) -> None:
 
 
 def price_check(customer_id: int, model: str, *args, **kwargs) -> r.Response:
-    year = kwargs.get("BASE_YEAR", 2025)
+    year = kwargs.get("BASE_YEAR", datetime.today().year)
     query = f"?model_number={model}&customer_id={customer_id}&price_year={year}"
     return r_get(url=MODEL_LOOKUP + query)
 
@@ -530,7 +530,7 @@ def new_product_setup(
             "vendor-product-attrs": attrs,
         },
         "relationships": {
-            "vendors": {"data": {"type": "vendors", "id": "adp"}},
+            "vendors": {"data": [{"type": "vendors", "id": "adp"}]}
         },
     }
     new_product_resp: r.Response = r_post(
@@ -559,15 +559,15 @@ def new_product_setup(
             "attributes": None,
             "relationships": {
                 "vendor-products": {
-                    "data": {"type": "vendor-products", "id": new_product_id}
+                    "data": [{"type": "vendor-products", "id": new_product_id}]
                 },
                 "vendor-product-classes": {
-                    "data": {
+                    "data": [{
                         "type": "vendor-product-classes",
                         "id": product_class_id,
-                    }
+                    }]
                 },
-                "vendors": {"data": {"type": "vendors", "id": "adp"}},
+                "vendors": {"data": [{"type": "vendors", "id": "adp"}]},
             },
         }
         r_post(BACKEND_URL + mapping_ep, json=dict(data=pl))
@@ -654,15 +654,15 @@ def post_new_product(
             },
             "relationships": {
                 "vendor-products": {
-                    "data": {"type": "vendor-products", "id": new_product_id}
+                    "data": [{"type": "vendor-products", "id": new_product_id}]
                 },
                 "vendor-customers": {
-                    "data": {"type": "vendor-customers", "id": customer_id}
+                    "data": [{"type": "vendor-customers", "id": customer_id}]
                 },
                 "vendor-pricing-classes": {
-                    "data": {"type": "vendor-pricing-classes", "id": PRICING_CLASS_ID}
+                    "data": [{"type": "vendor-pricing-classes", "id": PRICING_CLASS_ID}]
                 },
-                "vendors": {"data": {"type": "vendors", "id": "adp"}},
+                "vendors": {"data": [{"type": "vendors", "id": "adp"}]}
             },
         }
         resp: r.Response = r_post(
@@ -682,9 +682,9 @@ def post_new_product(
             },
             "relationships": {
                 "vendor-pricing-by-customer": {
-                    "data": {"type": "vendor-pricing-by-customer", "id": new_pricing_id}
+                    "data": [{"type": "vendor-pricing-by-customer", "id": new_pricing_id}]
                 },
-                "vendors": {"data": {"type": "vendors", "id": "adp"}},
+                "vendors": {"data": [{"type": "vendors", "id": "adp"}]}
             },
         }
         resp: r.Response = r_post(
@@ -736,15 +736,15 @@ def post_new_product(
             },
             "relationships": {
                 "vendor-products": {
-                    "data": {"type": "vendor-products", "id": existing_product_id}
+                    "data": [{"type": "vendor-products", "id": existing_product_id}]
                 },
                 "vendor-customers": {
-                    "data": {"type": "vendor-customers", "id": customer_id}
+                    "data": [{"type": "vendor-customers", "id": customer_id}]
                 },
                 "vendor-pricing-classes": {
-                    "data": {"type": "vendor-pricing-classes", "id": PRICING_CLASS_ID}
+                    "data": [{"type": "vendor-pricing-classes", "id": PRICING_CLASS_ID}]
                 },
-                "vendors": {"data": {"type": "vendors", "id": "adp"}},
+                "vendors": {"data": [{"type": "vendors", "id": "adp"}]}
             },
         }
         resp: r.Response = r_post(
@@ -764,9 +764,9 @@ def post_new_product(
             },
             "relationships": {
                 "vendor-pricing-by-customer": {
-                    "data": {"type": "vendor-pricing-by-customer", "id": new_pricing_id}
+                    "data": [{"type": "vendor-pricing-by-customer", "id": new_pricing_id}]
                 },
-                "vendors": {"data": {"type": "vendors", "id": "adp"}},
+                "vendors": {"data": [{"type": "vendors", "id": "adp"}]}
             },
         }
         resp: r.Response = r_post(
@@ -811,9 +811,9 @@ def post_new_product(
             },
             "relationships": {
                 "vendor-pricing-by-customer": {
-                    "data": {"type": "vendor-pricing-by-customer", "id": new_pricing_id}
+                    "data": [{"type": "vendor-pricing-by-customer", "id": new_pricing_id}]
                 },
-                "vendors": {"data": {"type": "vendors", "id": "adp"}},
+                "vendors": {"data": [{"type": "vendors", "id": "adp"}]}
             },
         }
         customer_pricing_future = "/v2/vendors/vendor-pricing-by-customer-future"
