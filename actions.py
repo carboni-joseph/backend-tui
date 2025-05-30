@@ -230,7 +230,8 @@ RATINGS = ADP_RESOURCE + "/adp-program-ratings"
 MODEL_LOOKUP = BACKEND_URL + "/vendors/model-lookup/adp"
 ADP_FILE_DOWNLOAD_LINK = (
     BACKEND_URL
-    + "/v2/vendors/adp/vendor-customers/{customer_id}/pricing?return_type=xlsx&effective_date={effective_date}"
+    + "/v2/vendors/adp/vendor-customers/{customer_id}/pricing"
+    "?return_type=xlsx&effective_date={effective_date}"
 )
 
 VERIFY = configs.getboolean("SSL", "verify")
@@ -750,8 +751,12 @@ def post_new_product(
         resp: r.Response = r_post(
             url=BACKEND_URL + customer_pricing_ep, json=dict(data=pl)
         )
-        new_pricing_id = resp.json()["data"]["id"]
-        logger.info("\tPricing set.")
+        if resp.status_code == 409:
+            new_pricing_id = resp.json()["detail"]["data"]["id"]
+            logger.info(f"\tCustomer has this product associated already. Current ID used {new_pricing_id}")
+        else:
+            new_pricing_id = resp.json()["data"]["id"]
+            logger.info("\tPricing set.")
 
         # set a customer price attr, custom_description, to the default for the product
         customer_price_attr_ep = "/v2/vendors/vendor-pricing-by-customer-attrs"
