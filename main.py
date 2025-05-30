@@ -278,7 +278,7 @@ class Application:
 
     # Menu Path Construction Begins
     def vendor_chosen(self, vendor: Vendor, button) -> None:
-        if not vendor.id == "adp":
+        if not vendor.id in HANDLERS:
             msg = f"{vendor.name} has not been implemented yet"
             text = urwid.Text(("flash_bad", msg))
             self.frame.header = urwid.Pile([text, self.frame.header])
