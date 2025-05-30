@@ -46,6 +46,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class VimScrollableListBox(urwid.ListBox):
+
+    def keypress(self, size, key):
+        motions = {
+            "h": "left",
+            "j": "down",
+            "k": "up",
+            "l": "right",
+        }
+        return super().keypress(size, motions.get(key, key))
+
+
 class Application:
 
     def __init__(self):
@@ -96,7 +108,7 @@ class Application:
     def run(self):
         self.main_loop.run()
 
-    def top_menu(self, button=None) -> urwid.ListBox | None:
+    def top_menu(self, button=None) -> VimScrollableListBox | None:
         logger.info("Getting Vendors ...")
         menu_widget = self.menu(
             "Choose a vendor:",
@@ -181,7 +193,7 @@ class Application:
         label_attrs: list[str] = None,
         as_table: bool = False,
         headers: list[str] = None,
-    ) -> urwid.ListBox:
+    ) -> VimScrollableListBox:
         """Builds the menu UI with the given choices."""
         self.frame.header = urwid.AttrMap(urwid.Text(title), Palette.HEADER.value[0])
         body = [urwid.Divider()]
@@ -201,7 +213,7 @@ class Application:
                 body.append(button)
             else:
                 body.append(urwid.AttrMap(button, attr_map=None, focus_map="reversed"))
-        return urwid.ListBox(urwid.SimpleFocusListWalker(body))
+        return VimScrollableListBox(urwid.SimpleFocusListWalker(body))
 
     def show_new_screen(self, *args) -> None:
         if self.WELCOME_SCREEN:
@@ -227,7 +239,7 @@ class Application:
         self,
         title: str,
         elements: list[Route | urwid.Widget],
-    ) -> urwid.ListBox:
+    ) -> VimScrollableListBox:
         """Builds the menu UI with callables associated by choice"""
         self.frame.header = urwid.AttrMap(urwid.Text(title), "header")
         body = [urwid.Divider()]
@@ -262,7 +274,7 @@ class Application:
                     body.append(urwid.AttrMap(button, None, focus_map=focus_map))
                 case urwid.Widget():
                     body.append(element)
-        return urwid.ListBox(urwid.SimpleFocusListWalker(body))
+        return VimScrollableListBox(urwid.SimpleFocusListWalker(body))
 
     # Menu Path Construction Begins
     def vendor_chosen(self, vendor: Vendor, button) -> None:
@@ -328,7 +340,7 @@ class Application:
             self.next_screen = self.handler.get_action_flow()
             self.handler.app.show_new_screen()
 
-    def edit_last_column(self, listbox: urwid.ListBox, **kwargs):
+    def edit_last_column(self, listbox: VimScrollableListBox, **kwargs):
         focus_widget: TableRow = listbox.focus
         focus_position: int = listbox.focus_position
 
@@ -345,7 +357,7 @@ class Application:
                 ]
                 focus_widget.contents = new_contents
 
-                prior_screen_body: urwid.ListBox = self.NAV_STACK[-1][-1]
+                prior_screen_body: VimScrollableListBox = self.NAV_STACK[-1][-1]
                 prior_screen_list = prior_screen_body.base_widget
                 prior_focus: urwid.Button = prior_screen_list.focus.base_widget
                 # prior_focus.set_label()
