@@ -228,9 +228,8 @@ BACKEND_URL = configs["ENDPOINTS"]["backend_url"]
 ADP_RESOURCE = BACKEND_URL + "/vendors/adp"
 RATINGS = ADP_RESOURCE + "/adp-program-ratings"
 MODEL_LOOKUP = BACKEND_URL + "/vendors/model-lookup/adp"
-ADP_FILE_DOWNLOAD_LINK = (
-    BACKEND_URL
-    + "/v2/vendors/adp/vendor-customers/{customer_id}/pricing"
+PRICE_FILE_DOWNLOAD_LINK = (
+    BACKEND_URL + "/v2/vendors/{vendor}/vendor-customers/{customer_id}/pricing"
     "?return_type=xlsx&effective_date={effective_date}"
 )
 
@@ -406,10 +405,12 @@ def get_sca_customers_w_vendor_accounts(vendor: Vendor) -> list[SCACustomerV2]:
     return result
 
 
-def request_dl_link(customer_id: int, stage: Stage) -> str:
+def request_dl_link(vendor: Vendor, customer_id: int) -> str:
     effective_date = datetime.today().date()
-    url = ADP_FILE_DOWNLOAD_LINK.format(
-        customer_id=customer_id, effective_date=effective_date
+    url = PRICE_FILE_DOWNLOAD_LINK.format(
+        vendor=vendor.id,
+        customer_id=customer_id,
+        effective_date=effective_date,
     )
     resp: r.Response = r_get(url=url)
     if not resp.status_code == 200:
@@ -420,9 +421,8 @@ def request_dl_link(customer_id: int, stage: Stage) -> str:
     return resp.json()["download_link"]
 
 
-def download_file(customer_id: str) -> None:
-    stage = Stage.PROPOSED
-    rel_link = request_dl_link(customer_id, stage)
+def download_file(vendor: Vendor, customer_id: str) -> None:
+    rel_link = request_dl_link(vendor, customer_id)
     resp: r.Response = r_get(BACKEND_URL + rel_link)
     if resp.status_code != 200:
         raise Exception("unable to download file")
@@ -530,9 +530,7 @@ def new_product_setup(
             "vendor-product-description": default_description,
             "vendor-product-attrs": attrs,
         },
-        "relationships": {
-            "vendors": {"data": [{"type": "vendors", "id": "adp"}]}
-        },
+        "relationships": {"vendors": {"data": [{"type": "vendors", "id": "adp"}]}},
     }
     new_product_resp: r.Response = r_post(
         url=BACKEND_URL + new_product_route, json=dict(data=pl)
@@ -563,10 +561,12 @@ def new_product_setup(
                     "data": [{"type": "vendor-products", "id": new_product_id}]
                 },
                 "vendor-product-classes": {
-                    "data": [{
-                        "type": "vendor-product-classes",
-                        "id": product_class_id,
-                    }]
+                    "data": [
+                        {
+                            "type": "vendor-product-classes",
+                            "id": product_class_id,
+                        }
+                    ]
                 },
                 "vendors": {"data": [{"type": "vendors", "id": "adp"}]},
             },
@@ -663,7 +663,7 @@ def post_new_product(
                 "vendor-pricing-classes": {
                     "data": [{"type": "vendor-pricing-classes", "id": PRICING_CLASS_ID}]
                 },
-                "vendors": {"data": [{"type": "vendors", "id": "adp"}]}
+                "vendors": {"data": [{"type": "vendors", "id": "adp"}]},
             },
         }
         resp: r.Response = r_post(
@@ -683,9 +683,11 @@ def post_new_product(
             },
             "relationships": {
                 "vendor-pricing-by-customer": {
-                    "data": [{"type": "vendor-pricing-by-customer", "id": new_pricing_id}]
+                    "data": [
+                        {"type": "vendor-pricing-by-customer", "id": new_pricing_id}
+                    ]
                 },
-                "vendors": {"data": [{"type": "vendors", "id": "adp"}]}
+                "vendors": {"data": [{"type": "vendors", "id": "adp"}]},
             },
         }
         resp: r.Response = r_post(
@@ -745,7 +747,7 @@ def post_new_product(
                 "vendor-pricing-classes": {
                     "data": [{"type": "vendor-pricing-classes", "id": PRICING_CLASS_ID}]
                 },
-                "vendors": {"data": [{"type": "vendors", "id": "adp"}]}
+                "vendors": {"data": [{"type": "vendors", "id": "adp"}]},
             },
         }
         resp: r.Response = r_post(
@@ -753,7 +755,9 @@ def post_new_product(
         )
         if resp.status_code == 409:
             new_pricing_id = resp.json()["detail"]["data"]["id"]
-            logger.info(f"\tCustomer has this product associated already. Current ID used {new_pricing_id}")
+            logger.info(
+                f"\tCustomer has this product associated already. Current ID used {new_pricing_id}"
+            )
         else:
             new_pricing_id = resp.json()["data"]["id"]
             logger.info("\tPricing set.")
@@ -769,9 +773,11 @@ def post_new_product(
             },
             "relationships": {
                 "vendor-pricing-by-customer": {
-                    "data": [{"type": "vendor-pricing-by-customer", "id": new_pricing_id}]
+                    "data": [
+                        {"type": "vendor-pricing-by-customer", "id": new_pricing_id}
+                    ]
                 },
-                "vendors": {"data": [{"type": "vendors", "id": "adp"}]}
+                "vendors": {"data": [{"type": "vendors", "id": "adp"}]},
             },
         }
         resp: r.Response = r_post(
@@ -816,9 +822,11 @@ def post_new_product(
             },
             "relationships": {
                 "vendor-pricing-by-customer": {
-                    "data": [{"type": "vendor-pricing-by-customer", "id": new_pricing_id}]
+                    "data": [
+                        {"type": "vendor-pricing-by-customer", "id": new_pricing_id}
+                    ]
                 },
-                "vendors": {"data": [{"type": "vendors", "id": "adp"}]}
+                "vendors": {"data": [{"type": "vendors", "id": "adp"}]},
             },
         }
         customer_pricing_future = "/v2/vendors/vendor-pricing-by-customer-future"
