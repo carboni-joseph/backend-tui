@@ -3,7 +3,15 @@ import logging
 from requests import Response
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Callable
-from models import ADPActions, Route, Palette, ProductPriceBasic, Attr
+from models import (
+    ADPActions,
+    Route,
+    Palette,
+    ProductPriceBasic,
+    Attr,
+    Vendor,
+    VendorCustomer,
+)
 from actions import (
     download_file,
     price_check,
@@ -31,8 +39,68 @@ class VendorHandler(ABC):
         pass
 
 
+class AtcoHandler(VendorHandler):
+
+    vendor = Vendor("atco", "Atco Flex")
+
+    def get_action_flow(self) -> Callable:
+        return partial(
+            self.app.menu,
+            f"{self.app.vendor_customer.name}",
+            self.download_pricing,
+            choices=["Download Price File"],
+        )
+
+    def download_pricing(self, *args, **kwargs) -> None:
+        customer = self.app.vendor_customer
+        try:
+            logger.info(f"Downloading {customer.vendor.name} file for {customer.name}")
+            download_file(vendor=self.vendor, customer_id=customer.id)
+        except Exception as e:
+            flash_text = urwid.Text(
+                ("flash_bad", f"an error occured - {str(e)}"), align="center"
+            )
+            logger.error(f"{e}")
+        else:
+            flash_text = urwid.Text(("flash_good", "downloaded file"), align="center")
+            logger.info("Done.")
+        finally:
+            self.app.frame.header = urwid.Pile([flash_text, self.app.frame.header])
+
+
+class VybondHandler(VendorHandler):
+
+    vendor = Vendor("vybond", "Vybond")
+
+    def get_action_flow(self) -> Callable:
+        return partial(
+            self.app.menu,
+            f"{self.app.vendor_customer.name}",
+            self.download_pricing,
+            choices=["Download Price File"],
+        )
+
+    def download_pricing(self, *args, **kwargs) -> None:
+        customer = self.app.vendor_customer
+        try:
+            logger.info(f"Downloading {customer.vendor.name} file for {customer.name}")
+            download_file(vendor=self.vendor, customer_id=customer.id)
+        except Exception as e:
+            flash_text = urwid.Text(
+                ("flash_bad", f"an error occured - {str(e)}"), align="center"
+            )
+            logger.error(f"{e}")
+        else:
+            flash_text = urwid.Text(("flash_good", "downloaded file"), align="center")
+            logger.info("Done.")
+        finally:
+            self.app.frame.header = urwid.Pile([flash_text, self.app.frame.header])
+
+
 class ADPHandler(VendorHandler):
     """ADP Management Flows"""
+
+    vendor = Vendor("adp", "ADP")
 
     def get_action_flow(self) -> Callable:
         return partial(
@@ -250,9 +318,8 @@ class ADPHandler(VendorHandler):
         return
 
 
-class BerryHandler(VendorHandler):
-    def get_action_flow(self):
-        return super().get_action_flow()
-
-
-HANDLERS: dict[str, type[VendorHandler]] = {"adp": ADPHandler}
+HANDLERS: dict[str, type[VendorHandler]] = {
+    "adp": ADPHandler,
+    "vybond": VybondHandler,
+    "atco": AtcoHandler,
+}
