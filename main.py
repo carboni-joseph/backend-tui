@@ -50,9 +50,17 @@ class VimScrollableListBox(urwid.ListBox):
 
     def keypress(self, size, key):
         motions = {
-            "h": "left",
             "j": "down",
             "k": "up",
+        }
+        return super().keypress(size, motions.get(key, key))
+
+
+class VimScrollableColumns(urwid.Columns):
+
+    def keypress(self, size, key):
+        motions = {
+            "h": "left",
             "l": "right",
         }
         return super().keypress(size, motions.get(key, key))
@@ -76,7 +84,7 @@ class Application:
         urwid.connect_signal(go_back_btn, "click", self.go_back)
         done = urwid.Button("Exit")
         urwid.connect_signal(done, "click", self.exit_program)
-        button_row = urwid.Columns(
+        button_row = VimScrollableColumns(
             [
                 ("pack", go_back_btn),
                 ("pack", back_to_top),
