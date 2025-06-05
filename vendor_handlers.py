@@ -16,8 +16,7 @@ from actions import (
     download_file,
     price_check,
     get_pricing_by_customer,
-    post_new_coil,
-    post_new_ah,
+    new_product,
     post_new_ratings,
     select_file,
     debug,
@@ -110,7 +109,7 @@ class ADPHandler(VendorHandler):
             choices=ADPActions,
         )
 
-    def add_new_model(self, submit_method: Callable) -> urwid.ListBox:
+    def _add_new_model(self, submit_method: Callable) -> urwid.ListBox:
         self.user_input = urwid.Edit("Enter Model Number: ")
         submit = urwid.Button("Submit", on_press=submit_method)
         return urwid.ListBox(
@@ -176,11 +175,8 @@ class ADPHandler(VendorHandler):
             self.app.frame.body = urwid.Filler(urwid.Pile([response_body]))
         return
 
-    def add_new_coil(self) -> urwid.ListBox:
-        return self.add_new_model(partial(self.submit_model, post_new_coil))
-
-    def add_new_ah(self) -> urwid.ListBox:
-        return self.add_new_model(partial(self.submit_model, post_new_ah))
+    def add_new_product(self) -> urwid.ListBox:
+        return self._add_new_model(partial(self.submit_model, new_product))
 
     def submit_model(self, product_type_method: Callable, button) -> None:
         """sends new model payload to the API"""
@@ -239,7 +235,7 @@ class ADPHandler(VendorHandler):
                     logger.info(
                         f"Downloading {customer.vendor.name} file for {customer.name}"
                     )
-                    download_file(customer_id=customer.id)
+                    download_file(vendor=self.vendor, customer_id=customer.id)
                 except Exception as e:
                     flash_text = urwid.Text(
                         ("flash_bad", f"an error occured - {str(e)}"), align="center"
@@ -263,18 +259,12 @@ class ADPHandler(VendorHandler):
                 products = get_pricing_by_customer(customer)
                 logging.info(f"Done")
                 routes = []
-                new_coil = Route(
-                    callable_=self.add_new_coil,
-                    choice_title="Add a new coil",
-                    callable_title="Enter Coil Model Number",
+                new_product_ = Route(
+                    callable_=self.add_new_product,
+                    choice_title="Add product",
+                    callable_title="Enter Model Numbers",
                 )
-                routes.append(new_coil)
-                new_ah = Route(
-                    callable_=self.add_new_ah,
-                    choice_title="Add a new air handler",
-                    callable_title="Enter Air Handler Model Number",
-                )
-                routes.append(new_ah)
+                routes.append(new_product_)
                 routes.append(urwid.Divider("="))
                 routes.append(
                     urwid.Text(

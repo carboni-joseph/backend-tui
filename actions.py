@@ -10,13 +10,11 @@ from datetime import datetime
 from enum import StrEnum, Enum
 from typing import Callable, Any, Optional
 from collections import defaultdict
-import concurrent.futures as futures
 from functools import partial, wraps
 from tkinter import Tk, filedialog
 from models import (
     SCACustomerV2,
     ProductPriceBasic,
-    Stage,
     Rating,
     Ratings,
     RatingAttrs,
@@ -455,9 +453,8 @@ def custom_response(data: dict) -> r.Response:
     return resp
 
 
-def post_new_coil(customer_id: int, model: str) -> r.Response:
-    coils = ADPProductClasses.COILS
-    data = post_new_product(customer_id=customer_id, model=model, class_1=coils)
+def new_product(customer_id: int, model: str) -> r.Response:
+    data = post_new_product(customer_id=customer_id, model=model)
     data["attributes"]["price"] = data["attributes"].pop("net_price")
     LOCAL_STORAGE["pricing_by_customer"][customer_id] |= {
         data["id"]: data["attributes"]
@@ -465,19 +462,7 @@ def post_new_coil(customer_id: int, model: str) -> r.Response:
     return custom_response(data=data)
 
 
-def post_new_ah(customer_id: int, model: str) -> r.Response:
-    ahs = ADPProductClasses.AIR_HANDLERS
-    data = post_new_product(customer_id=customer_id, model=model, class_1=ahs)
-    data["attributes"]["price"] = data["attributes"].pop("net_price")
-    LOCAL_STORAGE["pricing_by_customer"][customer_id] |= {
-        data["id"]: data["attributes"]
-    }
-    return custom_response(data=data)
-
-
-def new_product_setup(
-    customer_id: int, model: str, class_1: ADPProductClasses
-) -> NewProductDetails:
+def new_product_setup(customer_id: int, model: str) -> NewProductDetails:
 
     # look up model
     logger.info("\tLooking up model details")
@@ -502,6 +487,9 @@ def new_product_setup(
     snp_discount = model_lookup_content.pop("snp_discount", None)
     snp_net_price = model_lookup_content.pop("snp_net_price", None)
     net_price = int(model_lookup_content.pop("net_price"))
+    class_1 = ADPProductClasses(
+        {"name": model_lookup_content.pop("top_level_class"), "rank": 1}
+    )
 
     # set up custom attr objects for the payload
     attrs = []
@@ -590,9 +578,7 @@ def new_product_setup(
     )
 
 
-def post_new_product(
-    customer_id: int, model: str, class_1: ADPProductClasses
-) -> dict[str, int | dict]:
+def post_new_product(customer_id: int, model: str) -> dict[str, int | dict]:
     """
     STEPS
         check for existence
@@ -628,7 +614,7 @@ def post_new_product(
     if product_check_resp.status_code == 204 or new_product:
         new_product = True
         logger.info(f"\t{model} needs to be built")
-        new_product_details = new_product_setup(customer_id, model, class_1)
+        new_product_details = new_product_setup(customer_id, model)
 
         logger.info(f"\t{model} has been setup")
         new_product_id = new_product_details.id
