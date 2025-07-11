@@ -589,6 +589,7 @@ def post_new_product(customer_id: int, model: str) -> dict[str, int | dict]:
     """
 
     PRICING_CLASS_ID = 2  # being lazy - for STRATEGY_PRICING
+    ZDP_PRICING_CLASS_ID = 1  # ditto - for ZERO_DISCOUNT
     product_resource = (
         f"/v2/vendors/adp/vendor-products?filter_vendor_product_identifier={model}"
     )
@@ -655,7 +656,7 @@ def post_new_product(customer_id: int, model: str) -> dict[str, int | dict]:
         resp: r.Response = r_post(
             url=BACKEND_URL + customer_pricing_ep, json=dict(data=pl)
         )
-        logger.info("\tPricing set.")
+        logger.info("\tCustomer Pricing set.")
         new_pricing_id = resp.json()["data"]["id"]
 
         # set a customer price attr, custom_description, to the default for the product
@@ -681,6 +682,32 @@ def post_new_product(customer_id: int, model: str) -> dict[str, int | dict]:
         )
         new_attr = resp.json()
         logger.info("\tCustom description established")
+
+        # Zero discount Pricing
+        class_price_zero_disc_ep = "/v2/vendors/vendor-pricing-by-class"
+        pl = {
+            "type": "vendor-pricing-by-class",
+            "attributes": {
+                "price": zero_discount_price * 100,
+                "effective-date": str(effective_date),
+            },
+            "relationships": {
+                "vendor-products": {
+                    "data": [{"type": "vendor-products", "id": new_product_id}]
+                },
+                "vendor-pricing-classes": {
+                    "data": [
+                        {"type": "vendor-pricing-classes", "id": ZDP_PRICING_CLASS_ID}
+                    ]
+                },
+                "vendors": {"data": [{"type": "vendors", "id": "adp"}]},
+            },
+        }
+        resp: r.Response = r_post(
+            url=BACKEND_URL + class_price_zero_disc_ep, json=dict(data=pl)
+        )
+        logger.info("\tZero Discount Pricing set.")
+
         # add these back in for the return object
         model_lookup_content |= {"zero_discount_price": zero_discount_price}
         model_lookup_content |= {"material_group_discount": material_group_discount}
